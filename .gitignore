@@ -172,3 +172,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+detalhes_para_subir_docker.txt
