@@ -80,10 +80,45 @@ class ScholarshipSerializer(serializers.ModelSerializer):
         scholarship.technologies.set(technologies)
         return scholarship
 
+    def update(self, instance, validated_data):
+        # 1. Extraímos os dados ou retornamos None caso não existam na request
+        phases_data = validated_data.pop('phases', None)
+        links_data = validated_data.pop('links', None)
+        requirements_data = validated_data.pop('requirements', None)
+        technologies_data = validated_data.pop('technologies', None)
+
+        # 2. Atualiza campos simples (mantém o que não foi enviado)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 3. Tecnologias (Só altera se a chave vier na requisição)
+        if technologies_data is not None:
+            instance.technologies.set(technologies_data)
+
+        # 4. Dados Aninhados: Só apaga e recria se a chave vier na requisição
+        # Se você não enviar 'phases' no JSON, este bloco é pulado e as fases antigas ficam intactas.
+        if phases_data is not None:
+            instance.phases.all().delete()
+            for phase in phases_data:
+                ScholarshipPhase.objects.create(scholarship=instance, **phase)
+
+        if links_data is not None:
+            instance.links.all().delete()
+            for link in links_data:
+                ScholarshipLink.objects.create(scholarship=instance, **link)
+
+        if requirements_data is not None:
+            instance.requirements.all().delete()
+            for req in requirements_data:
+                ScholarshipRequirement.objects.create(scholarship=instance, **req)
+
+        return instance
+
 
 class ApplicationSerializer(serializers.ModelSerializer):
     student_ira = serializers.DecimalField(max_digits=4, decimal_places=2, write_only=True)
-    user_role = serializers.CharField(write_only=True)  # Recebido do Gateway/Auth
+    user_role = serializers.CharField(write_only=True)
 
     class Meta:
         model = Application
@@ -92,7 +127,6 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         # 1. Professores não podem se inscrever
-        # Atualizar o role para o padão em inglês
         if data.get('user_role') == 'PROFESSOR':
             raise serializers.ValidationError("Professores não podem se inscrever em bolsas.")
 
@@ -106,16 +140,26 @@ class ApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"IRA insuficiente. Mínimo: {scholarship.minimum_ira}")
 
         # 3. Prazo de Inscrição
-        phase = scholarship.phases.filter(title__icontains="Inscrição").first()
-        if not phase or not (phase.start_date <= now <= phase.end_date):
-            raise serializers.ValidationError("Inscrições fora do prazo ou fase não definida.")
+        phase = scholarship.phases.filter(title__icontains="Inscriç").first()
 
-        # 4. Apenas uma bolsa ativa (Lógica de duração)
+        if not phase:
+            raise serializers.ValidationError("Fase de inscrições não definida para esta bolsa.")
+
+        if not (phase.start_date <= now <= phase.end_date):
+            raise serializers.ValidationError(
+                f"Inscrições fora do prazo. Aberto de {phase.start_date.strftime('%d/%m/%Y')} até {phase.end_date.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
+            )
+
+        # 4. Apenas uma bolsa ativa
         active_apps = Application.objects.filter(student_id=student_id, status='Aprovado')
         for app in active_apps:
-            # Cálculo: Data de aprovação + meses de duração
             end_of_scholarship = app.applied_at + timezone.timedelta(days=app.scholarship.duration_in_months * 30)
             if now < end_of_scholarship:
                 raise serializers.ValidationError(f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}.")
 
         return data
+
+    def create(self, validated_data):
+        validated_data.pop('student_ira', None)
+        validated_data.pop('user_role', None)
+        return super().create(validated_data)
