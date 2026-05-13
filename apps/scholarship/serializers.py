@@ -92,6 +92,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         # 1. Professores não podem se inscrever
+        # Atualizar o role para o padão em inglês
         if data.get('user_role') == 'PROFESSOR':
             raise serializers.ValidationError("Professores não podem se inscrever em bolsas.")
 

@@ -16,10 +16,7 @@ class Technology(models.Model):
 
 
 class Scholarship(models.Model):
-    class StatusChoices(models.TextChoices):
-        OPEN = 'Open', 'Open'
-        CLOSING = 'Closing', 'Closing'
-        CLOSED = 'Closed', 'Closed'
+    STATUS_CHOICES = [('Open', 'Open'), ('Closing', 'Closing'), ('Closed', 'Closed')]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
@@ -32,7 +29,7 @@ class Scholarship(models.Model):
 
     orientator_id = models.UUIDField(default=uuid.uuid4)
 
-    status = models.CharField(max_length=20, choices=StatusChoices.choices, default=StatusChoices.OPEN)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
 
     technologies = models.ManyToManyField(Technology, related_name='scholarships')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -43,12 +40,14 @@ class Scholarship(models.Model):
 
 
 class ScholarshipLink(models.Model):
+    TYPE_CHOICES = [('Edital', 'Edital'), ('Attachment', 'Attachment'), ('Form', 'Form'), ('Other', 'Other')]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='links')
     label = models.CharField(max_length=255, help_text='Ex: Edital, Anexo I')
     url = models.URLField()
-    type = models.CharField(max_length=50, help_text='EDITAL, ATTACHMENT, FORM, OTHER')
-    display_order = models.IntegerField(default=1)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='Other')
+    display_order = models.PositiveIntegerField(default=1)
 
     class Meta:
         ordering = ['display_order']
@@ -62,7 +61,7 @@ class ScholarshipRequirement(models.Model):
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='requirements')
     title = models.CharField(max_length=100)
     description = models.TextField()
-    display_order = models.IntegerField(default=1)
+    display_order = models.PositiveIntegerField(default=1)
 
     class Meta:
         ordering = ['display_order']
@@ -87,15 +86,12 @@ class ScholarshipPhase(models.Model):
 
 
 class Application(models.Model):
-    class StatusChoices(models.TextChoices):
-        ENROLLED = 'Enrolled', 'Enrolled'
-        APPROVED = 'Approved', 'Approved'
-        REJECTED = 'Rejected', 'Rejected'
+    STATUS_CHOICES = [('Enrolled', 'Enrolled'), ('Approved', 'Approved'), ('Rejected', 'Rejected')]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='applications')
     student_id = models.UUIDField()
-    status = models.CharField(max_length=20, choices=StatusChoices.choices, default=StatusChoices.ENROLLED)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Enrolled')
     applied_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
