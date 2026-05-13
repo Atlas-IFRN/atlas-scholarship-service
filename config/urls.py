@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
-from django.urls import path
+from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
 def health_check(request):
@@ -9,4 +10,10 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check),
+    path('api/', include('apps.scholarship.urls')),
+
+    # rotas para a docuemtação swagger funcionar
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    # rota para acessar a documentação no navegador
+    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

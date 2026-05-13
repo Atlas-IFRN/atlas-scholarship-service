@@ -55,9 +55,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'rest_framework',
 
     # Local apps
     "apps.scholarship",
+
+    # biblioteca responsável por gerar a documentação Swagger da API
+    'drf_spectacular',
 ]
 
 # ------------------------------------------------------------------------------
@@ -74,6 +78,33 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+
+# Quando o JWT estiver implementado, descomente a configuração abaixo
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#     ),
+#     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+# }
+
+# Configuração para permitir acesso à documentação Swagger sem autenticação
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Scholarship Service API',
+    'DESCRIPTION': 'Microsserviço responsável pela gestão de bolsas, editais e inscrições de alunos.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True, 
+}
 
 # ------------------------------------------------------------------------------
 # TEMPLATES
