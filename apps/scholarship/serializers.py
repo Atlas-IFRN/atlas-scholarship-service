@@ -46,6 +46,8 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'minimum_period',
             'minimum_ira',
             'orientator_id',
+            'registration_start',
+            'registration_end',
             'status',
             'phases',
             'links',
@@ -92,12 +94,9 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
-        # 3. Tecnologias (Só altera se a chave vier na requisição)
         if technologies_data is not None:
             instance.technologies.set(technologies_data)
 
-        # 4. Dados Aninhados: Só apaga e recria se a chave vier na requisição
-        # Se você não enviar 'phases' no JSON, este bloco é pulado e as fases antigas ficam intactas.
         if phases_data is not None:
             instance.phases.all().delete()
             for phase in phases_data:
@@ -126,8 +125,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'applied_at']
 
     def validate(self, data):
-        # 1. Professores não podem se inscrever
-        if data.get('user_role') == 'PROFESSOR':
+        if data.get('user_role') == 'TEACHER':
             raise serializers.ValidationError("Professores não podem se inscrever em bolsas.")
 
         scholarship = data['scholarship']
@@ -140,18 +138,15 @@ class ApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"IRA insuficiente. Mínimo: {scholarship.minimum_ira}")
 
         # 3. Prazo de Inscrição
-        phase = scholarship.phases.filter(title__icontains="Inscriç").first()
+        if not scholarship.registration_start or not scholarship.registration_end:
+            raise serializers.ValidationError("Datas de inscrição não definidas para esta bolsa.")
 
-        if not phase:
-            raise serializers.ValidationError("Fase de inscrições não definida para esta bolsa.")
-
-        if not (phase.start_date <= now <= phase.end_date):
+        if not (scholarship.registration_start <= now <= scholarship.registration_end):
             raise serializers.ValidationError(
-                f"Inscrições fora do prazo. Aberto de {phase.start_date.strftime('%d/%m/%Y')} até {phase.end_date.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
+                f"Inscrições fora do prazo. Aberto de {scholarship.registration_start.strftime('%d/%m/%Y')} até {scholarship.registration_end.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
             )
 
-        # 4. Apenas uma bolsa ativa
-        active_apps = Application.objects.filter(student_id=student_id, status='Aprovado')
+        active_apps = Application.objects.filter(student_id=student_id, status='Approved')
         for app in active_apps:
             end_of_scholarship = app.applied_at + timezone.timedelta(days=app.scholarship.duration_in_months * 30)
             if now < end_of_scholarship:

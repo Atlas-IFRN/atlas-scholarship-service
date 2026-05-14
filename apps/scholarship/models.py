@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 
 class Technology(models.Model):
@@ -26,6 +27,9 @@ class Scholarship(models.Model):
     vacancies = models.PositiveIntegerField(default=1)
     minimum_period = models.PositiveIntegerField(default=1)
     minimum_ira = models.DecimalField(max_digits=4, decimal_places=2)
+
+    registration_start = models.DateTimeField(default=timezone.now)
+    registration_end = models.DateTimeField(default=timezone.now)
 
     orientator_id = models.UUIDField(default=uuid.uuid4)
 

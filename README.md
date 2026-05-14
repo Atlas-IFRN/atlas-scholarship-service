@@ -75,10 +75,12 @@ http://127.0.0.1:8000/swagger/
   "minimum_period": 2,
   "minimum_ira": 7.5,
   "orientator_id": "84825945-8370-496e-9080-692797e556e4",
-  "technologies": ["UUID-DA-TECNOLOGIA-AQUI"],
+  "registration_start": "2026-05-13T20:51:53.641973-03:00",
+  "registration_end": "2026-10-13T20:51:53.593598-03:00",
+  "technologies": ["2020eee9-c30f-44f9-988f-854e9e7c9348"],
   "phases": [
     {
-      "title": "Inscrições",
+      "title": "Entrevistas",
       "start_date": "2026-06-01T08:00:00Z",
       "end_date": "2026-06-15T23:59:59Z",
       "display_order": 1
@@ -106,7 +108,7 @@ http://127.0.0.1:8000/swagger/
   "scholarship": "UUID-DA-BOLSA-AQUI",
   "student_id": "c1234567-89ab-cdef-0123-456789abcdef",
   "student_ira": 8.85,
-  "user_role": "ALUNO"
+  "user_role": "STUDENT"
 }
 
 
