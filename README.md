@@ -56,7 +56,61 @@ A documentação interativa da API é gerada automaticamente pelo `drf-spectacul
 ## Para acessá-la localmente, suba o container docker e acesse a seguinte URL em seu navegador:
 http://127.0.0.1:8000/swagger/
 
-> **Nota:** Os exemplos de payloads para criação de Bolsas, Inscrições e Tecnologias estão embutidos diretamente na interface do Swagger.
+## Exemplos de payloads
+# Criar uma tecnologia:
+{
+    "name": "Python"
+},
+{
+    "name": "C#"
+}
+
+# Criar uma bolsa estudantil:
+{
+  "title": "Monitoria de Algoritmos 2026.1",
+  "description": "Auxílio a alunos do primeiro ano nas disciplinas de programação.",
+  "value_per_month": 700.00,
+  "duration_in_months": 6,
+  "vacancies": 4,
+  "minimum_period": 2,
+  "minimum_ira": 7.5,
+  "orientator_id": "84825945-8370-496e-9080-692797e556e4",
+  "registration_start": "2026-05-13T20:51:53.641973-03:00",
+  "registration_end": "2026-10-13T20:51:53.593598-03:00",
+  "technologies": ["2020eee9-c30f-44f9-988f-854e9e7c9348"],
+  "phases": [
+    {
+      "title": "Entrevistas",
+      "start_date": "2026-06-01T08:00:00Z",
+      "end_date": "2026-06-15T23:59:59Z",
+      "display_order": 1
+    }
+  ],
+  "links": [
+    {
+      "label": "Edital Oficial (PDF)",
+      "url": "https://universidade.edu/edital-01.pdf",
+      "type": "Edital",
+      "display_order": 1
+    }
+  ],
+  "requirements": [
+    {
+      "title": "Nota em Algoritmos I",
+      "description": "Ter média final igual ou superior a 8.0 na disciplina.",
+      "display_order": 1
+    }
+  ]
+}
+
+# Criar uma inscrição em uma bolsa:
+{
+  "scholarship": "UUID-DA-BOLSA-AQUI",
+  "student_id": "c1234567-89ab-cdef-0123-456789abcdef",
+  "student_ira": 8.85,
+  "user_role": "STUDENT"
+}
+
 
 ### Como atualizar a documentação
-A documentação reflete o código atual. Sempre que adicionar uma nova rota, atualizar um `Serializer` ou alterar as permissões de uma View, o Swagger será atualizado automaticamente. Use os decoradores `@extend_schema` nas Views para customizar descrições, tags e exemplos de payloads.
+A documentação reflete o código atual. Sempre que adicionar uma nova rota, atualizar um `Serializer` ou alterar as permissões de uma View, o Swagger será atualizado automaticamente.
