@@ -8,7 +8,7 @@ from apps.scholarship.models import Application
 # BANCO DE TALENTOS
 class TalentBankRegistration(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    student = models.UUIDField(help_text="UUID do aluno registrado no banco de talentos")
+    student_id = models.UUIDField(help_text="UUID do aluno registrado no banco de talentos")
 
     is_actively_looking = models.BooleanField(default=True, verbose_name="Buscando oportunidades?")
 

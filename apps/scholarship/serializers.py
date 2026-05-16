@@ -122,35 +122,50 @@ class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
         fields = ['id', 'scholarship', 'student_id', 'student_ira', 'user_role', 'status', 'applied_at']
-        read_only_fields = ['id', 'status', 'applied_at']
+        read_only_fields = ['id', 'applied_at']
 
     def validate(self, data):
         if data.get('user_role') == 'TEACHER':
             raise serializers.ValidationError("Professores não podem se inscrever em bolsas.")
 
-        scholarship = data['scholarship']
-        student_id = data['student_id']
-        student_ira = data['student_ira']
-        now = timezone.now()
+        # Identifica se é uma atualização (PATCH/PUT) ou criação (POST)
+        is_update = self.instance is not None
 
-        # 2. IRA Mínimo
-        if student_ira < scholarship.minimum_ira:
-            raise serializers.ValidationError(f"IRA insuficiente. Mínimo: {scholarship.minimum_ira}")
+        # Pega os valores do dicionário (se enviados) ou usa os que já estão salvos no banco (se for atualização)
+        scholarship = data.get('scholarship', getattr(self.instance, 'scholarship', None))
+        student_id = data.get('student_id', getattr(self.instance, 'student_id', None))
 
-        # 3. Prazo de Inscrição
-        if not scholarship.registration_start or not scholarship.registration_end:
-            raise serializers.ValidationError("Datas de inscrição não definidas para esta bolsa.")
+        # Se for uma criação, fazemos todas as validações de regra de negócio
+        if not is_update:
+            student_ira = data.get('student_ira')
+            now = timezone.now()
 
-        if not (scholarship.registration_start <= now <= scholarship.registration_end):
-            raise serializers.ValidationError(
-                f"Inscrições fora do prazo. Aberto de {scholarship.registration_start.strftime('%d/%m/%Y')} até {scholarship.registration_end.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
-            )
+            # Evita quebrar se o POST for enviado sem scholarship ou IRA (o DRF já vai barrar como campo obrigatório antes)
+            if scholarship and student_ira is not None:
+                # 2. IRA Mínimo
+                if student_ira < scholarship.minimum_ira:
+                    raise serializers.ValidationError(f"IRA insuficiente. Mínimo: {scholarship.minimum_ira}")
 
-        active_apps = Application.objects.filter(student_id=student_id, status='Approved')
-        for app in active_apps:
-            end_of_scholarship = app.applied_at + timezone.timedelta(days=app.scholarship.duration_in_months * 30)
-            if now < end_of_scholarship:
-                raise serializers.ValidationError(f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}.")
+            if scholarship:
+                # 3. Prazo de Inscrição
+                if not scholarship.registration_start or not scholarship.registration_end:
+                    raise serializers.ValidationError("Datas de inscrição não definidas para esta bolsa.")
+
+                if not (scholarship.registration_start <= now <= scholarship.registration_end):
+                    raise serializers.ValidationError(
+                        f"Inscrições fora do prazo. Aberto de {scholarship.registration_start.strftime('%d/%m/%Y')} até {scholarship.registration_end.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
+                    )
+
+            if student_id and scholarship:
+                active_apps = Application.objects.filter(student_id=student_id, status='Approved')
+                for app in active_apps:
+                    end_of_scholarship = app.applied_at + timezone.timedelta(
+                        days=app.scholarship.duration_in_months * 30
+                    )
+                    if now < end_of_scholarship:
+                        raise serializers.ValidationError(
+                            f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}."
+                        )
 
         return data
 
