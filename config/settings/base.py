@@ -59,7 +59,8 @@ INSTALLED_APPS = [
 
     # Local apps
     "apps.scholarship",
-
+    "apps.talent",
+    
     # biblioteca responsável por gerar a documentação Swagger da API
     'drf_spectacular',
 ]

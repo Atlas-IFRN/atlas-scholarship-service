@@ -10,7 +10,10 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check),
-    path('api/', include('apps.scholarship.urls')),
+
+    path('api/scholarship/', include('apps.scholarship.urls')),
+
+    path('api/talents/', include('apps.talent.urls')),
 
     # rotas para a docuemtação swagger funcionar
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
