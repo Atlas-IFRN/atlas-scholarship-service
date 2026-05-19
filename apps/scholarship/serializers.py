@@ -1,4 +1,4 @@
-from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from .models import Application, Scholarship, ScholarshipLink, ScholarshipPhase, ScholarshipRequirement, Technology
@@ -58,10 +58,21 @@ class ScholarshipSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'status', 'created_at', 'updated_at']
 
-    def validate_links(self, value):
-        if not value:
-            raise serializers.ValidationError("A bolsa deve possuir pelo menos um link ou edital.")
-        return value
+    def validate(self, data):
+        # Cria uma instância temporária do model na memória para rodar a validação limpa
+        instance = Scholarship(
+            **{k: v for k, v in data.items() if k not in ['phases', 'links', 'requirements', 'technologies']}
+        )
+
+        # Injeta a lista de links para validação de negócio no model
+        instance._temporary_links = data.get('links', [])
+
+        try:
+            instance.clean()
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.message_dict)
+
+        return data
 
     def create(self, validated_data):
         phases_data = validated_data.pop('phases')
@@ -71,7 +82,6 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 
         scholarship = Scholarship.objects.create(**validated_data)
 
-        # Criação dos itens relacionados
         for phase in phases_data:
             ScholarshipPhase.objects.create(scholarship=scholarship, **phase)
         for link in links_data:
@@ -83,13 +93,11 @@ class ScholarshipSerializer(serializers.ModelSerializer):
         return scholarship
 
     def update(self, instance, validated_data):
-        # 1. Extraímos os dados ou retornamos None caso não existam na request
         phases_data = validated_data.pop('phases', None)
         links_data = validated_data.pop('links', None)
         requirements_data = validated_data.pop('requirements', None)
         technologies_data = validated_data.pop('technologies', None)
 
-        # 2. Atualiza campos simples (mantém o que não foi enviado)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -125,47 +133,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'applied_at']
 
     def validate(self, data):
-        if data.get('user_role') == 'TEACHER':
-            raise serializers.ValidationError("Professores não podem se inscrever em bolsas.")
+        if self.instance:
+            instance = self.instance
+            for attr, value in data.items():
+                setattr(instance, attr, value)
+        else:
+            instance = Application(scholarship=data.get('scholarship'), student_id=data.get('student_id'))
 
-        # Identifica se é uma atualização (PATCH/PUT) ou criação (POST)
-        is_update = self.instance is not None
+        # Injeta as variáveis transientes necessárias para as regras de negócio no Model
+        instance._student_ira = data.get('student_ira')
+        instance._student_role = data.get('user_role')
 
-        # Pega os valores do dicionário (se enviados) ou usa os que já estão salvos no banco (se for atualização)
-        scholarship = data.get('scholarship', getattr(self.instance, 'scholarship', None))
-        student_id = data.get('student_id', getattr(self.instance, 'student_id', None))
-
-        # Se for uma criação, fazemos todas as validações de regra de negócio
-        if not is_update:
-            student_ira = data.get('student_ira')
-            now = timezone.now()
-
-            # Evita quebrar se o POST for enviado sem scholarship ou IRA (o DRF já vai barrar como campo obrigatório antes)
-            if scholarship and student_ira is not None:
-                # 2. IRA Mínimo
-                if student_ira < scholarship.minimum_ira:
-                    raise serializers.ValidationError(f"IRA insuficiente. Mínimo: {scholarship.minimum_ira}")
-
-            if scholarship:
-                # 3. Prazo de Inscrição
-                if not scholarship.registration_start or not scholarship.registration_end:
-                    raise serializers.ValidationError("Datas de inscrição não definidas para esta bolsa.")
-
-                if not (scholarship.registration_start <= now <= scholarship.registration_end):
-                    raise serializers.ValidationError(
-                        f"Inscrições fora do prazo. Aberto de {scholarship.registration_start.strftime('%d/%m/%Y')} até {scholarship.registration_end.strftime('%d/%m/%Y')}. Agora é {now.strftime('%d/%m/%Y')}"
-                    )
-
-            if student_id and scholarship:
-                active_apps = Application.objects.filter(student_id=student_id, status='Approved')
-                for app in active_apps:
-                    end_of_scholarship = app.applied_at + timezone.timedelta(
-                        days=app.scholarship.duration_in_months * 30
-                    )
-                    if now < end_of_scholarship:
-                        raise serializers.ValidationError(
-                            f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}."
-                        )
+        try:
+            instance.clean()
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.message_dict)
 
         return data
 
