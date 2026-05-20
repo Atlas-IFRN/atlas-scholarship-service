@@ -7,16 +7,14 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 def health_check(request):
     return HttpResponse("OK", status=200)
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check),
 
     path('api/scholarship/', include('apps.scholarship.urls')),
-
     path('api/talents/', include('apps.talent.urls')),
 
-    # rotas para a docuemtação swagger funcionar
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    # rota para acessar a documentação no navegador
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

@@ -80,8 +80,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-# endereço do servidor gRPC de autenticação 
-AUTH_GRPC_URL = os.environ.get('AUTH_GRPC_URL', 'auth-service:50051')
+# endereço do servidor gRPC de autenticação
+AUTH_GRPC_URL = env('AUTH_GRPC_URL', default='auth-service:50051')
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
