@@ -3,6 +3,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 
 class Technology(models.Model):
@@ -158,3 +159,38 @@ class Application(models.Model):
                         raise ValidationError(
                             {"student_id": f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}."}
                         )
+
+
+class AuditAction(models.TextChoices):
+    CREATE = 'CREATE', _('Create')
+    UPDATE = 'UPDATE', _('Update')
+    DELETE = 'DELETE', _('Delete')
+
+
+class AuditLogTable(models.TextChoices):
+    TECHNOLOGY = 'technology', _('Technology')
+    SCHOLARSHIP = 'scholarship', _('Scholarship')
+    SCHOLARSHIP_LINK = 'scholarship_link', _('Scholarship Link')
+    SCHOLARSHIP_REQUIREMENT = 'scholarship_requirement', _('Scholarship Requirement')
+    SCHOLARSHIP_PHASE = 'scholarship_phase', _('Scholarship Phase')
+    APPLICATION = 'application', _('Application')
+    TALENT = 'talent', _('Talent')
+    NOTE = 'note', _('Note')
+
+
+class AuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    table_name = models.CharField(max_length=100, choices=AuditLogTable.choices)
+    action = models.CharField(max_length=10, choices=AuditAction.choices)
+    record_id = models.UUIDField(help_text="PK do registro afetado")
+    user_id = models.UUIDField(null=True, blank=True, help_text="UUID do usuário responsável pela operação")
+    payload = models.JSONField(null=True, blank=True, help_text="Snapshot before/after do registro")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.action}] {self.table_name} ({self.record_id})"
