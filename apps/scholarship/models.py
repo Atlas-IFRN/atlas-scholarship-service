@@ -112,6 +112,7 @@ class Application(models.Model):
 
         user_role = getattr(self, '_student_role', None)
         student_ira = getattr(self, '_student_ira', None)
+        student_period = getattr(self, '_student_period', None)
 
         if user_role == 'TEACHER':
             raise ValidationError({"user_role": "Professores não podem se inscrever em bolsas."})
@@ -120,14 +121,25 @@ class Application(models.Model):
         if self._state.adding:
             now = timezone.now()
 
+            # Validação de IRA mínimo
             if student_ira is not None and self.scholarship:
                 if student_ira < self.scholarship.minimum_ira:
                     raise ValidationError({"student_ira": f"IRA insuficiente. Mínimo: {self.scholarship.minimum_ira}"})
+
+            # Validação de período mínimo (semestre mínimo)
+            if student_period is not None and self.scholarship:
+                if student_period < self.scholarship.minimum_period:
+                    raise ValidationError(
+                        {
+                            "student_period": f"Período insuficiente. A bolsa exige estar no mínimo no {self.scholarship.minimum_period}º período."
+                        }
+                    )
 
             if self.scholarship:
                 if not self.scholarship.registration_start or not self.scholarship.registration_end:
                     raise ValidationError({"scholarship": "Datas de inscrição não definidas para esta bolsa."})
 
+                # Validação de prazo de inscrição
                 if not (self.scholarship.registration_start <= now <= self.scholarship.registration_end):
                     raise ValidationError(
                         {
@@ -135,6 +147,7 @@ class Application(models.Model):
                         }
                     )
 
+            # Lógica para não deixar o aluno acumular bolsas
             if self.student_id and self.scholarship:
                 active_apps = Application.objects.filter(student_id=self.student_id, status='Approved')
                 for app in active_apps:
