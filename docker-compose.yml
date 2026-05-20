@@ -10,12 +10,11 @@ services:
       - .:/app
       - /app/.venv
     ports:
-      - "8000:8000"
+      - "8002:8000"
     env_file:
       - .env
-    networks:
-      - atlas_net
 
 networks:
-  atlas_net:
-    external: true
+  default:
+    external:
+      name: atlas-network

@@ -18,5 +18,5 @@ urlpatterns = [
     # rotas para a docuemtação swagger funcionar
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     # rota para acessar a documentação no navegador
-    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

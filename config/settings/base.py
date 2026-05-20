@@ -80,21 +80,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-# Quando o JWT estiver implementado, descomente a configuração abaixo
-# REST_FRAMEWORK = {
-#     'DEFAULT_AUTHENTICATION_CLASSES': (
-#         'rest_framework_simplejwt.authentication.JWTAuthentication',
-#     ),
-#     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-# }
+# endereço do servidor gRPC de autenticação 
+AUTH_GRPC_URL = os.environ.get('AUTH_GRPC_URL', 'auth-service:50051')
 
-# Configuração para permitir acesso à documentação Swagger sem autenticação
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'config.auth.DevMockAuthentication', # Ajuste o caminho do import
-    ),
     
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',

@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, viewsets
+from rest_framework import viewsets
 
-from config.permissions import IsStudent, IsTeacher
+from config.permissions import IsAuthenticatedViaRPC, IsTeacher
 
 from .models import Note, Talent
 from .serializers import NoteSerializer, TalentSerializer
@@ -13,34 +13,38 @@ class TalentViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     def get_permissions(self):
-        """Permissões divididas entre alunos (criam) e professores (listam/removem)."""
+        """Permissões divididas usando a nova estrutura baseada em roles do gRPC."""
         if self.action == 'create':
-            return [IsStudent()]
+            return [IsAuthenticatedViaRPC()]
         elif self.action in ['list', 'destroy']:
-            return [IsTeacher()]
-        elif self.action in ['retrieve', 'update', 'partial_update']:
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAuthenticated()]
+            return [IsAuthenticatedViaRPC(allowed_roles=['TEACHER'])]
+
+        # 'retrieve', 'update', 'partial_update' aceitam qualquer um logado,
+        # pois o get_queryset se encarrega de isolar o registro do aluno correto.
+        return [IsAuthenticatedViaRPC()]
 
     def get_queryset(self):
         """Isola os dados do talento ou mostra aos professores a lista dos ativos."""
-        user = self.request.user
-        role = getattr(user, 'role', None)
+        payload = self.request.auth_payload
+        role = payload.get('role')
 
         if role == 'TEACHER':
             if self.action == 'list':
                 return Talent.objects.filter(status='Active')
             return Talent.objects.all()
 
-        return Talent.objects.filter(student_id=user.id)
+        return Talent.objects.filter(student_id=payload.get('id'))
 
     def perform_create(self, serializer):
-        """Garante que o aluno inscreva a si mesmo."""
-        serializer.save(student_id=self.request.user.id)
+        if hasattr(self.request, 'auth_payload') and self.request.auth_payload:
+            student_id = self.request.auth_payload.get('user_id')
+            serializer.save(student_id=student_id)
+        else:
+            serializer.save()
 
     def perform_update(self, serializer):
         """Injeta apenas o ID de quem fez a mudança para fins de auditoria."""
-        serializer.save(status_changed_by=self.request.user.id)
+        serializer.save(status_changed_by=self.request.auth_payload.get('id'))
 
 
 @extend_schema(tags=['Notas de entrevistas'])
@@ -49,18 +53,21 @@ class NoteViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     def get_permissions(self):
-        """Notas são criadas e editadas apenas por professores."""
+        # Apenas professores podem criar, editar ou deletar notas
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsTeacher()]
-        return [permissions.IsAuthenticated()]
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
+
+        return [IsAuthenticatedViaRPC()]
 
     def get_queryset(self):
         """Aluno só lê as próprias notas, professor lê todas."""
-        user = self.request.user
-        if getattr(user, 'role', None) == 'TEACHER':
+        payload = self.request.auth_payload
+        role = payload.get('role')
+
+        if role == 'TEACHER':
             return Note.objects.all()
-        return Note.objects.filter(student_id=user.id)
+        return Note.objects.filter(student_id=payload.get('id'))
 
     def perform_create(self, serializer):
-        """Associa a nota ao professor criador automaticamente."""
-        serializer.save(orientador_id=self.request.user.id)
+        """Associa a nota ao professor criador automaticamente via ID do gRPC."""
+        serializer.save(orientador_id=self.request.auth_payload.get('id'))
