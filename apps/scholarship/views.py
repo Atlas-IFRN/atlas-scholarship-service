@@ -1,7 +1,6 @@
 from rest_framework import viewsets
 
-# Importando apenas a nossa permissão unificada por RPC
-from config.permissions import IsAuthenticatedViaRPC
+from config.permissions import IsAuthenticatedViaRPC, IsStudent, IsTeacher
 
 from .models import Application, Scholarship, Technology
 from .serializers import ApplicationSerializer, ScholarshipSerializer, TechnologySerializer
@@ -15,7 +14,7 @@ class TechnologyViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Apenas professores gerenciam tecnologias. Qualquer logado pode listar/ver.
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticatedViaRPC(allowed_roles=['TEACHER'])]
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
         return [IsAuthenticatedViaRPC()]
 
 
@@ -27,7 +26,7 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Apenas professores gerenciam bolsas. Alunos só listam e veem detalhes.
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticatedViaRPC(allowed_roles=['TEACHER'])]
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
         return [IsAuthenticatedViaRPC()]
 
     def perform_create(self, serializer):
@@ -42,10 +41,10 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'create':
             # Apenas ALUNOS podem se inscrever em bolsas
-            return [IsAuthenticatedViaRPC(allowed_roles=['STUDENT'])]
+            return [IsAuthenticatedViaRPC(), IsStudent()]
         elif self.action in ['update', 'partial_update', 'destroy']:
             # Apenas PROFESSORES podem mudar o status da inscrição (ex: Approved, Rejected)
-            return [IsAuthenticatedViaRPC(allowed_roles=['TEACHER'])]
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
 
         # Leitura é permitida para os dois (o isolamento é feito no get_queryset)
         return [IsAuthenticatedViaRPC()]

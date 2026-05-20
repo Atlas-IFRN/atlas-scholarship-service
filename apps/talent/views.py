@@ -17,7 +17,7 @@ class TalentViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return [IsAuthenticatedViaRPC()]
         elif self.action in ['list', 'destroy']:
-            return [IsAuthenticatedViaRPC(allowed_roles=['TEACHER'])]
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
 
         # 'retrieve', 'update', 'partial_update' aceitam qualquer um logado,
         # pois o get_queryset se encarrega de isolar o registro do aluno correto.
