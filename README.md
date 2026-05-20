@@ -77,7 +77,7 @@ http://127.0.0.1:8000/swagger/
   "orientator_id": "84825945-8370-496e-9080-692797e556e4",
   "registration_start": "2026-05-13T20:51:53.641973-03:00",
   "registration_end": "2026-10-13T20:51:53.593598-03:00",
-  "technologies": ["2020eee9-c30f-44f9-988f-854e9e7c9348"],
+  "technologies": ["UUID-DA-TECNOLOGIA-AQUI"],
   "phases": [
     {
       "title": "Entrevistas",
@@ -109,6 +109,21 @@ http://127.0.0.1:8000/swagger/
   "student_id": "c1234567-89ab-cdef-0123-456789abcdef",
   "student_ira": 8.85,
   "user_role": "STUDENT"
+}
+
+# Criar um registro no banco de talentos
+{
+  student_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+	"is_actively_looking": true
+}
+
+# Criar uma entrevista
+{
+	"interviewer_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+	"description": "O aluno se comunica muito bem, tem muito conhecimento técnico da linguagem e de estruturas de projetos.",
+	"interview_date": "2026-05-15T21:23:43.538000-03:00",
+	"talent_registration": "UUID-DO-REGISTRO-NO-BANCO-DE-TALENTOS-AQUI",
+	"application": "UUID-DA-INSCRIÇÃO-AQUI (OPCIONAL)"
 }
 
 
