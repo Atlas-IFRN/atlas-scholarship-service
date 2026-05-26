@@ -33,18 +33,19 @@ class TalentViewSet(viewsets.ModelViewSet):
                 return Talent.objects.filter(status='Active')
             return Talent.objects.all()
 
-        return Talent.objects.filter(student_id=payload.get('id'))
+        return Talent.objects.filter(student_id=payload.get('user_id'))
 
     def perform_create(self, serializer):
-        if hasattr(self.request, 'auth_payload') and self.request.auth_payload:
-            student_id = self.request.auth_payload.get('user_id')
-            serializer.save(student_id=student_id)
-        else:
-            serializer.save()
+        serializer.save(student_id=self.request.auth_payload.get('user_id'))
 
     def perform_update(self, serializer):
         """Injeta apenas o ID de quem fez a mudança para fins de auditoria."""
-        serializer.save(status_changed_by=self.request.auth_payload.get('id'))
+        serializer.save(status_changed_by=self.request.auth_payload.get('user_id'))
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['auth_payload'] = getattr(self.request, 'auth_payload', None) or {}
+        return context
 
 
 @extend_schema(tags=['Notas de entrevistas'])
@@ -66,8 +67,8 @@ class NoteViewSet(viewsets.ModelViewSet):
 
         if role == 'TEACHER':
             return Note.objects.all()
-        return Note.objects.filter(student_id=payload.get('id'))
+        return Note.objects.filter(student_id=payload.get('user_id'))
 
     def perform_create(self, serializer):
         """Associa a nota ao professor criador automaticamente via ID do gRPC."""
-        serializer.save(orientador_id=self.request.auth_payload.get('id'))
+        serializer.save(orientador_id=self.request.auth_payload.get('user_id'))

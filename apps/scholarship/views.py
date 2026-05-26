@@ -6,13 +6,14 @@ from rest_framework.response import Response
 
 from config.permissions import IsAuthenticatedViaRPC, IsStudent, IsTeacher
 
+from .grpc_client import get_user_profile
 from .models import Application, Scholarship, Technology
 from .serializers import ApplicationSerializer, ScholarshipSerializer, TechnologySerializer
 
 
 def _ensure_scholarship_owner(scholarship: Scholarship, request) -> None:
     """Bloqueia ação se o usuário logado não for o orientador da bolsa."""
-    user_id = request.auth_payload.get('id') if getattr(request, 'auth_payload', None) else None
+    user_id = request.auth_payload.get('user_id') if getattr(request, 'auth_payload', None) else None
     if str(scholarship.orientator_id) != str(user_id):
         raise PermissionDenied("Apenas o orientador da bolsa pode executar esta ação.")
 
@@ -41,7 +42,7 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
         return [IsAuthenticatedViaRPC()]
 
     def perform_create(self, serializer):
-        serializer.save(orientator_id=self.request.auth_payload.get('id'))
+        serializer.save(orientator_id=self.request.auth_payload.get('user_id'))
 
     @action(detail=True, methods=['post'])
     def close(self, request, id=None):
@@ -59,22 +60,24 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='me/orienting')
     def me_orienting(self, request):
         """Bolsas do professor atual + contagem de inscritos."""
-        user_id = request.auth_payload.get('id')
+        user_id = request.auth_payload.get('user_id')
         scholarships = Scholarship.objects.filter(orientator_id=user_id).order_by('-created_at')
 
         results = []
         for s in scholarships:
-            results.append({
-                'id': str(s.id),
-                'title': s.title,
-                'status': s.status,
-                'vacancies': s.vacancies,
-                'value_per_month': str(s.value_per_month),
-                'applications_count': s.applications.count(),
-                'registration_start': s.registration_start,
-                'registration_end': s.registration_end,
-                'created_at': s.created_at,
-            })
+            results.append(
+                {
+                    'id': str(s.id),
+                    'title': s.title,
+                    'status': s.status,
+                    'vacancies': s.vacancies,
+                    'value_per_month': str(s.value_per_month),
+                    'applications_count': s.applications.count(),
+                    'registration_start': s.registration_start,
+                    'registration_end': s.registration_end,
+                    'created_at': s.created_at,
+                }
+            )
         return Response(results)
 
     @action(detail=True, methods=['get'])
@@ -102,6 +105,16 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             return [IsAuthenticatedViaRPC(), IsStudent()]
         return [IsAuthenticatedViaRPC()]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+
+        if self.action == 'create':
+            payload = getattr(self.request, 'auth_payload', None) or {}
+            user_id = payload.get('user_id')
+            context['auth_profile'] = get_user_profile(user_id) if user_id else None
+
+        return context
+
     def get_queryset(self):
         payload = self.request.auth_payload
         role = payload.get('role')
@@ -109,22 +122,24 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         if role == 'TEACHER':
             return Application.objects.all()
 
-        return Application.objects.filter(student_id=payload.get('id'))
+        return Application.objects.filter(student_id=payload.get('user_id'))
 
     def perform_create(self, serializer):
         payload = self.request.auth_payload
-        serializer.save(student_id=payload.get('id'), user_role=payload.get('role', 'STUDENT'))
+        serializer.save(student_id=payload.get('user_id'))
 
     @action(detail=True, methods=['post'])
     def withdraw(self, request, id=None):
         """Aluno cancela a própria candidatura."""
         application = self.get_object()
-        user_id = request.auth_payload.get('id')
+        user_id = request.auth_payload.get('user_id')
         if str(application.student_id) != str(user_id):
             raise PermissionDenied("Você só pode cancelar a sua própria candidatura.")
 
         if application.status == 'Approved':
-            raise ValidationError({"status": "Candidaturas já aprovadas não podem ser canceladas. Procure o orientador."})
+            raise ValidationError(
+                {"status": "Candidaturas já aprovadas não podem ser canceladas. Procure o orientador."}
+            )
         if application.status == 'Rejected':
             raise ValidationError({"status": "Candidatura já está como Rejected."})
 

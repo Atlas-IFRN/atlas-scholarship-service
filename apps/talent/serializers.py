@@ -21,12 +21,10 @@ class NoteSerializer(serializers.ModelSerializer):
 
 
 class TalentSerializer(serializers.ModelSerializer):
-    # Pode apagar aquela linha: user_role = serializers.CharField(...)
-
     class Meta:
         model = Talent
         fields = '__all__'
-        read_only_fields = ['id', 'status_changed_by', 'status_changed_at', 'joined_at']
+        read_only_fields = ['id', 'student_id', 'status_changed_by', 'status_changed_at', 'joined_at']
 
     def validate(self, data):
         if self.instance:
@@ -40,11 +38,10 @@ class TalentSerializer(serializers.ModelSerializer):
         else:
             instance = Talent(**data)
 
-        # MÁGICA AQUI: Pegamos o usuário logado direto do contexto da requisição
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            # Injeta no model a role real de quem fez a requisição
-            instance._user_role = getattr(request.user, 'role', 'STUDENT')
+        auth_payload = self.context.get('auth_payload') or {}
+        instance._user_role = auth_payload.get('role', 'STUDENT')
+        if not self.instance:
+            instance.student_id = auth_payload.get('user_id')
 
         try:
             instance.clean()
