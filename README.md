@@ -105,27 +105,13 @@ http://127.0.0.1:8000/swagger/
 
 # Criar uma inscrição em uma bolsa:
 {
-  "scholarship": "UUID-DA-BOLSA-AQUI",
-  "student_id": "c1234567-89ab-cdef-0123-456789abcdef",
-  "student_ira": 8.85,
-  "user_role": "STUDENT"
+  "scholarship": "UUID-DA-BOLSA-AQUI"
 }
 
 # Criar um registro no banco de talentos
 {
-  student_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-	"is_actively_looking": true
+  "is_actively_looking": true
 }
-
-# Criar uma entrevista
-{
-	"interviewer_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-	"description": "O aluno se comunica muito bem, tem muito conhecimento técnico da linguagem e de estruturas de projetos.",
-	"interview_date": "2026-05-15T21:23:43.538000-03:00",
-	"talent_registration": "UUID-DO-REGISTRO-NO-BANCO-DE-TALENTOS-AQUI",
-	"application": "UUID-DA-INSCRIÇÃO-AQUI (OPCIONAL)"
-}
-
 
 ### Como atualizar a documentação
 A documentação reflete o código atual. Sempre que adicionar uma nova rota, atualizar um `Serializer` ou alterar as permissões de uma View, o Swagger será atualizado automaticamente.

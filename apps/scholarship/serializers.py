@@ -124,25 +124,27 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
-    student_ira = serializers.DecimalField(max_digits=4, decimal_places=2, write_only=True)
-    user_role = serializers.CharField(write_only=True)
-
     class Meta:
         model = Application
-        fields = ['id', 'scholarship', 'student_id', 'student_ira', 'user_role', 'status', 'applied_at']
-        read_only_fields = ['id', 'applied_at']
+        fields = ['id', 'scholarship', 'student_id', 'status', 'applied_at']
+        read_only_fields = ['id', 'student_id', 'applied_at']
 
     def validate(self, data):
+        auth_profile = self.context.get('auth_profile') or {}
+        if not auth_profile:
+            raise serializers.ValidationError({'student_id': 'Não foi possível carregar o perfil do aluno.'})
+
         if self.instance:
             instance = self.instance
             for attr, value in data.items():
                 setattr(instance, attr, value)
         else:
-            instance = Application(scholarship=data.get('scholarship'), student_id=data.get('student_id'))
+            instance = Application(scholarship=data.get('scholarship'), student_id=auth_profile.get('id'))
 
         # Injeta as variáveis transientes necessárias para as regras de negócio no Model
-        instance._student_ira = data.get('student_ira')
-        instance._student_role = data.get('user_role')
+        instance._student_ira = auth_profile.get('ira')
+        instance._student_role = auth_profile.get('role')
+        instance._student_period = auth_profile.get('period')
 
         try:
             instance.clean()
@@ -150,8 +152,3 @@ class ApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(e.message_dict)
 
         return data
-
-    def create(self, validated_data):
-        validated_data.pop('student_ira', None)
-        validated_data.pop('user_role', None)
-        return super().create(validated_data)
