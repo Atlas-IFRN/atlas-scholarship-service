@@ -11,15 +11,15 @@ class Technology(models.Model):
     name = models.CharField(max_length=50, unique=True)
 
     class Meta:
-        verbose_name = "Tecnologia"
-        verbose_name_plural = "Tecnologias"
+        verbose_name = "Technology"
+        verbose_name_plural = "Technologies"
 
     def __str__(self):
         return self.name
 
 
 class Scholarship(models.Model):
-    STATUS_CHOICES = [('Open', 'Open'), ('Closing', 'Closing'), ('Closed', 'Closed')]
+    STATUS_CHOICES = [('Draft', 'Draft'), ('Open', 'Open'), ('RegistrationClosed', 'Registration Closed'), ('Closed', 'Closed')]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
@@ -29,12 +29,8 @@ class Scholarship(models.Model):
     vacancies = models.PositiveIntegerField(default=1)
     minimum_period = models.PositiveIntegerField(default=1)
     minimum_ira = models.DecimalField(max_digits=4, decimal_places=2)
-
-    registration_start = models.DateTimeField(default=timezone.now)
-    registration_end = models.DateTimeField(default=timezone.now)
-    orientator_id = models.UUIDField(default=uuid.uuid4)
+    published_by = models.UUIDField(default=uuid.uuid4)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
-
     technologies = models.ManyToManyField(Technology, related_name='scholarships')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -42,21 +38,12 @@ class Scholarship(models.Model):
     def __str__(self):
         return self.title
 
-    def clean(self):
-        super().clean()
-        # Validação transiente de links passada pelo serializer durante a criação/atualização
-        if hasattr(self, '_temporary_links') and not self._temporary_links:
-            raise ValidationError({"links": "A bolsa deve possuir pelo menos um link ou edital."})
-
 
 class ScholarshipLink(models.Model):
-    TYPE_CHOICES = [('Edital', 'Edital'), ('Attachment', 'Attachment'), ('Form', 'Form'), ('Other', 'Other')]
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='links')
     label = models.CharField(max_length=255, help_text='Ex: Edital, Anexo I')
     url = models.URLField()
-    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='Other')
     display_order = models.PositiveIntegerField(default=1)
 
     class Meta:
@@ -81,11 +68,14 @@ class ScholarshipRequirement(models.Model):
 
 
 class ScholarshipPhase(models.Model):
+    TYPE_CHOICES = [('Registration', 'Registration'), ('Selection', 'Selection'), ('Result', 'Result'), ('Other', 'Other')]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='phases')
-    title = models.CharField(max_length=100)
+    title = models.CharField(max_length=100, null=True, blank=True)
     start_date = models.DateTimeField()
     end_date = models.DateTimeField()
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='Other')
     display_order = models.PositiveIntegerField(default=1)
 
     class Meta:
@@ -96,7 +86,7 @@ class ScholarshipPhase(models.Model):
 
 
 class Application(models.Model):
-    STATUS_CHOICES = [('Enrolled', 'Enrolled'), ('Approved', 'Approved'), ('Rejected', 'Rejected')]
+    STATUS_CHOICES = [('Cancelled', 'Cancelled'), ('Enrolled', 'Enrolled'), ('Approved', 'Approved'), ('Rejected', 'Rejected')]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scholarship = models.ForeignKey(Scholarship, on_delete=models.CASCADE, related_name='applications')
@@ -107,6 +97,9 @@ class Application(models.Model):
 
     class Meta:
         unique_together = ('scholarship', 'student_id')
+        
+    def __str__(self):
+        return f"{self.id}"
 
     def clean(self):
         super().clean()
@@ -118,7 +111,6 @@ class Application(models.Model):
         if user_role == 'TEACHER':
             raise ValidationError({"user_role": "Professores não podem se inscrever em bolsas."})
 
-        # SE ESTIVER ADICIONANDO (Ou seja, se for uma CRIAÇÃO/POST)
         if self._state.adding:
             now = timezone.now()
 
@@ -136,29 +128,19 @@ class Application(models.Model):
                         }
                     )
 
+            # Validação de prazo de inscrição
             if self.scholarship:
-                if not self.scholarship.registration_start or not self.scholarship.registration_end:
-                    raise ValidationError({"scholarship": "Datas de inscrição não definidas para esta bolsa."})
-
-                # Validação de prazo de inscrição
-                if not (self.scholarship.registration_start <= now <= self.scholarship.registration_end):
-                    raise ValidationError(
-                        {
-                            "scholarship": f"Inscrições fora do prazo. Aberto de {self.scholarship.registration_start.strftime('%d/%m/%Y')} até {self.scholarship.registration_end.strftime('%d/%m/%Y')}."
-                        }
-                    )
-
-            # Lógica para não deixar o aluno acumular bolsas
-            if self.student_id and self.scholarship:
-                active_apps = Application.objects.filter(student_id=self.student_id, status='Approved')
-                for app in active_apps:
-                    end_of_scholarship = app.applied_at + timezone.timedelta(
-                        days=app.scholarship.duration_in_months * 30
-                    )
-                    if now < end_of_scholarship:
+                # primeiro buscamos a fase de inscrição da bolsa
+                registration_phase = self.scholarship.phases.filter(type='Registration').first()
+                
+                if registration_phase:
+                    if not (registration_phase.start_date <= now <= registration_phase.end_date):
                         raise ValidationError(
-                            {"student_id": f"Você já possui uma bolsa ativa até {end_of_scholarship.date()}."}
+                            {
+                                "scholarship": f"Inscrições fora do prazo."
+                            }
                         )
+                
 
 
 class AuditAction(models.TextChoices):

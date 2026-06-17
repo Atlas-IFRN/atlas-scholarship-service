@@ -43,9 +43,9 @@ A forma mais rápida de rodar o projeto é utilizando o Docker, pois ele já con
 ## 🧪 Comandos Úteis
 
 * **Criar Superusuário (Admin):**
-    `docker-compose exec scholarship python manage.py createsuperuser`
+    `docker-compose exec web python manage.py createsuperuser`
 * **Criar Migrações:**
-    `docker-compose exec scholarship python manage.py makemigrations`
+    `docker-compose exec web python manage.py makemigrations`
 * **Parar Containers:**
     `docker-compose down`
 
@@ -67,40 +67,44 @@ http://127.0.0.1:8000/swagger/
 
 # Criar uma bolsa estudantil:
 {
-  "title": "Monitoria de Algoritmos 2026.1",
-  "description": "Auxílio a alunos do primeiro ano nas disciplinas de programação.",
-  "value_per_month": 700.00,
-  "duration_in_months": 6,
-  "vacancies": 4,
-  "minimum_period": 2,
-  "minimum_ira": 7.5,
-  "orientator_id": "84825945-8370-496e-9080-692797e556e4",
-  "registration_start": "2026-05-13T20:51:53.641973-03:00",
-  "registration_end": "2026-10-13T20:51:53.593598-03:00",
-  "technologies": ["UUID-DA-TECNOLOGIA-AQUI"],
-  "phases": [
-    {
-      "title": "Entrevistas",
-      "start_date": "2026-06-01T08:00:00Z",
-      "end_date": "2026-06-15T23:59:59Z",
-      "display_order": 1
-    }
-  ],
-  "links": [
-    {
-      "label": "Edital Oficial (PDF)",
-      "url": "https://universidade.edu/edital-01.pdf",
-      "type": "Edital",
-      "display_order": 1
-    }
-  ],
-  "requirements": [
-    {
-      "title": "Nota em Algoritmos I",
-      "description": "Ter média final igual ou superior a 8.0 na disciplina.",
-      "display_order": 1
-    }
-  ]
+	"title": "Sistema de Monitoramento com IoT e Machine Learning",
+	"description": "Pesquisa aplicada a soluções embarcadas com coleta de dados em tempo real e modelos preditivos de manutenção. O projeto integra o grupo de pesquisa do Carlos Fernandes e tem como objetivo desenvolver uma solução completa — da fundamentação teórica à validação experimental — com publicação dos resultados em eventos científicos nacionais e, conforme desempenho, em periódicos qualificados pela CAPES.",
+	"value_per_month": "750.00",
+	"duration_in_months": 12,
+	"vacancies": 4,
+	"minimum_period": 3,
+	"minimum_ira": "70.00",
+	"published_by": "98e4789a-b16b-4a8c-9376-e41a8f8e9ca3",
+	"status": "Open",
+	"phases": [
+		{
+			"title": "Inscrições",
+			"start_date": "2026-06-14T23:54:38-03:00",
+			"end_date": "2026-06-30T23:54:45-03:00",
+			"display_order": 1
+		}
+	],
+	"links": [
+		{
+			"label": "Edital",
+			"url": "https://suap.ifrn.edu.br/",
+			"display_order": 1
+		}
+	],
+	"requirements": [
+		{
+			"title": "Conhecimento em Python",
+			"description": "Ter concluído a trilha de conhecimento backend com Python",
+			"display_order": 1
+		}
+	],
+	"technologies": [
+		{
+			"id": "UUID-DA-TECNOLOGIA-AQUI",
+		}
+	],
+	"created_at": "2026-06-14T23:53:33.282430-03:00",
+	"updated_at": "2026-06-14T23:53:33.282460-03:00"
 }
 
 # Criar uma inscrição em uma bolsa:

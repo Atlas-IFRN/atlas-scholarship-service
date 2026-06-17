@@ -13,7 +13,7 @@ class TechnologySerializer(serializers.ModelSerializer):
 class ScholarshipLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScholarshipLink
-        fields = ['id', 'label', 'url', 'type', 'display_order']
+        fields = ['id', 'label', 'url', 'display_order']
 
 
 class ScholarshipRequirementSerializer(serializers.ModelSerializer):
@@ -28,11 +28,12 @@ class ScholarshipPhaseSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'start_date', 'end_date', 'display_order']
 
 
+# Serializer principal para criação e atualização de bolsas, incluindo os campos relacionados (phases, links, requirements e technologies)
 class ScholarshipSerializer(serializers.ModelSerializer):
     phases = ScholarshipPhaseSerializer(many=True)
     links = ScholarshipLinkSerializer(many=True)
     requirements = ScholarshipRequirementSerializer(many=True)
-    technologies = serializers.PrimaryKeyRelatedField(queryset=Technology.objects.all(), many=True)
+    technologies = TechnologySerializer(many=True, read_only=True)
 
     class Meta:
         model = Scholarship
@@ -45,9 +46,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'vacancies',
             'minimum_period',
             'minimum_ira',
-            'orientator_id',
-            'registration_start',
-            'registration_end',
+            'published_by',
             'status',
             'phases',
             'links',
@@ -56,40 +55,36 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'status', 'published_by', 'created_at', 'updated_at']
 
     def validate(self, data):
-        # Cria uma instância temporária do model na memória para rodar a validação limpa
-        instance = Scholarship(
-            **{k: v for k, v in data.items() if k not in ['phases', 'links', 'requirements', 'technologies']}
-        )
-
-        # Injeta a lista de links para validação de negócio no model
-        instance._temporary_links = data.get('links', [])
-
-        try:
-            instance.clean()
-        except DjangoValidationError as e:
-            raise serializers.ValidationError(e.message_dict)
-
+        if not data.get('links'):
+            raise serializers.ValidationError(
+                {"links": "A bolsa deve possuir pelo menos um link para redirecionar os alunos ao edital."}
+            )
         return data
+
+    def _create_nested(self, scholarship, phases, links, requirements):
+        ScholarshipPhase.objects.bulk_create(
+            [ScholarshipPhase(scholarship=scholarship, **p) for p in phases]
+        )
+        ScholarshipLink.objects.bulk_create(
+            [ScholarshipLink(scholarship=scholarship, **l) for l in links]
+        )
+        ScholarshipRequirement.objects.bulk_create(
+            [ScholarshipRequirement(scholarship=scholarship, **r) for r in requirements]
+        )
 
     def create(self, validated_data):
         phases_data = validated_data.pop('phases')
         links_data = validated_data.pop('links')
-        reqs_data = validated_data.pop('requirements')
+        requirements_data = validated_data.pop('requirements')
         technologies = validated_data.pop('technologies')
 
         scholarship = Scholarship.objects.create(**validated_data)
-
-        for phase in phases_data:
-            ScholarshipPhase.objects.create(scholarship=scholarship, **phase)
-        for link in links_data:
-            ScholarshipLink.objects.create(scholarship=scholarship, **link)
-        for req in reqs_data:
-            ScholarshipRequirement.objects.create(scholarship=scholarship, **req)
-
         scholarship.technologies.set(technologies)
+        self._create_nested(scholarship, phases_data, links_data, requirements_data)
+
         return scholarship
 
     def update(self, instance, validated_data):
@@ -107,51 +102,47 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 
         if phases_data is not None:
             instance.phases.all().delete()
-            for phase in phases_data:
-                ScholarshipPhase.objects.create(scholarship=instance, **phase)
+            ScholarshipPhase.objects.bulk_create(
+                [ScholarshipPhase(scholarship=instance, **p) for p in phases_data]
+            )
 
         if links_data is not None:
             instance.links.all().delete()
-            for link in links_data:
-                ScholarshipLink.objects.create(scholarship=instance, **link)
+            ScholarshipLink.objects.bulk_create(
+                [ScholarshipLink(scholarship=instance, **l) for l in links_data]
+            )
 
         if requirements_data is not None:
             instance.requirements.all().delete()
-            for req in requirements_data:
-                ScholarshipRequirement.objects.create(scholarship=instance, **req)
+            ScholarshipRequirement.objects.bulk_create(
+                [ScholarshipRequirement(scholarship=instance, **r) for r in requirements_data]
+            )
 
         return instance
 
 
+# Serializer para a listagem de bolsas, com menos detalhes (sem os campos relacionados, servirá para os cards de listagem)
+class ScholarshipListSerializer(ScholarshipSerializer):
+    class Meta(ScholarshipSerializer.Meta):
+        fields = [
+            f for f in ScholarshipSerializer.Meta.fields
+            if f not in ('phases', 'links', 'requirements')
+        ]
+
+
 class ApplicationSerializer(serializers.ModelSerializer):
-    student_ira = serializers.DecimalField(max_digits=4, decimal_places=2, write_only=True)
-    user_role = serializers.CharField(write_only=True)
+    student_ira = serializers.DecimalField(max_digits=4, decimal_places=2, write_only=True, required=False)
+    student_period = serializers.IntegerField(write_only=True, required=False)
+    user_role = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Application
-        fields = ['id', 'scholarship', 'student_id', 'student_ira', 'user_role', 'status', 'applied_at']
-        read_only_fields = ['id', 'applied_at']
-
-    def validate(self, data):
-        if self.instance:
-            instance = self.instance
-            for attr, value in data.items():
-                setattr(instance, attr, value)
-        else:
-            instance = Application(scholarship=data.get('scholarship'), student_id=data.get('student_id'))
-
-        # Injeta as variáveis transientes necessárias para as regras de negócio no Model
-        instance._student_ira = data.get('student_ira')
-        instance._student_role = data.get('user_role')
-
-        try:
-            instance.clean()
-        except DjangoValidationError as e:
-            raise serializers.ValidationError(e.message_dict)
-
-        return data
+        # nós adicionamos os campos STUDENT_IRA, STUDENT_PERIOD e USER_ROLE para validação, mas eles não são persistidos no model
+        fields = ['id', 'scholarship', 'student_id', 'student_ira', 'student_period', 'user_role', 'status', 'applied_at']
+        read_only_fields = ['id', 'scholarship', 'student_id', 'applied_at']
 
     def create(self, validated_data):
         validated_data.pop('student_ira', None)
+        validated_data.pop('student_period', None)
         validated_data.pop('user_role', None)
         return super().create(validated_data)

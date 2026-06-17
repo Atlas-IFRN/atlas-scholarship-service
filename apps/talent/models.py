@@ -15,7 +15,6 @@ class Note(models.Model):
 
     def clean(self):
         super().clean()
-        # Validação simples de coerência
         if self.student_id == self.orientador_id:
             raise ValidationError("Um professor não pode criar notas para si mesmo.")
 
@@ -24,9 +23,7 @@ class Talent(models.Model):
     STATUS_CHOICES = [('Active', 'Active'), ('Fulfilled', 'Fulfilled'), ('Inactive', 'Inactive')]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Adicionado unique=True para garantir 1 perfil por aluno
     student_id = models.UUIDField(unique=True, help_text="UUID do aluno registrado no banco de talentos")
-
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
     status_changed_by = models.UUIDField(help_text="UUID do usuário que alterou", null=True, blank=True)
     status_changed_at = models.DateTimeField(null=True, blank=True)
@@ -37,15 +34,13 @@ class Talent(models.Model):
 
         user_role = getattr(self, '_user_role', None)
 
-        # Só valida regras de transição se for uma atualização (registro já existente)
         if not self._state.adding:
             old_instance = Talent.objects.get(pk=self.pk)
 
-            # Se houve mudança de status
             if old_instance.status != self.status:
 
                 if user_role == 'STUDENT':
-                    # O Aluno pode transitar livremente ENTRE 'Active' e 'Inactive'
+                    # O Aluno pode ficar invisivel no banco de talentos informando que ele não tem interesse em bolsas ativas, ou seja, alternar entre 'Active' e 'Inactive'.
                     status_permitidos_aluno = {'Active', 'Inactive'}
 
                     if old_instance.status not in status_permitidos_aluno or self.status not in status_permitidos_aluno:
@@ -54,7 +49,7 @@ class Talent(models.Model):
                         )
 
                 elif user_role == 'TEACHER':
-                    # O Professor pode transitar livremente ENTRE 'Active' e 'Fulfilled'
+                    # O Professor pode deixar um aluno invisivel no banco de talentos informando que o aluno já tem bolsa ativa. Ou seja, alternar entre 'Active' e 'Fulfilled'.
                     status_permitidos_professor = {'Active', 'Fulfilled'}
 
                     if (
