@@ -1,71 +1,54 @@
 # Scholarship Service 🎓
 
-Serviço de gerenciamento de bolsas de estudo desenvolvido com Django 5.x e Docker.
+Microserviço do ecossistema **Atlas** responsável pelo gerenciamento de bolsas de estudo, candidaturas, banco de talentos e pontuação de alunos.
 
----
+## Stack
 
-## 🛠️ Setup Local (Com Docker) - Recomendado
+- Python · Django 5.x · Django REST Framework
+- PostgreSQL · Redis · RabbitMQ + Celery
+- Docker · drf-spectacular (Swagger/OpenAPI 3.0)
 
-A forma mais rápida de rodar o projeto é utilizando o Docker, pois ele já configura todo o ambiente para você.
+## Executando localmente
 
-1.  **Clone o repositório:**
-    No terminal:
-    git clone <url-do-repositorio>
-    cd scholarship-service
+Este serviço é orquestrado junto com todos os outros pelo repositório central de infraestrutura:
 
-2.  **Configure as variáveis de ambiente:**
-    Crie um arquivo chamado `.env` na raiz do projeto e cole as informações que estão presentes no .env.example
+> **[Atlas-IFRN/atlas-infra](https://github.com/Atlas-IFRN/atlas-infra)** — Docker Compose canônico, Nginx, scripts de deploy e backup.
 
-3. **Crie um ambiente virtual e o ative**
-    python -m venv .venv
+Para subir apenas a infraestrutura compartilhada (Postgres, Redis, RabbitMQ) e rodar este serviço isolado em modo dev:
 
-    No windows: .\.venv\Scripts\activate
-    No linux: source .venv/bin/activate
+```bash
+# 1. Suba a infra compartilhada
+git clone https://github.com/Atlas-IFRN/atlas-infra
+cd atlas-infra
+docker compose -f docker-compose.dev.yml up -d
 
-4. **Baixe as dependências presentes no requirements.txt**
-    pip install django django-environ
-    ou
-    pip install -r requirements.txt
+# 2. Neste repositório
+cp .env.example .env
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 8002
+```
 
-5.  **Suba o container:**
-    docker compose up --build
+## Variáveis de ambiente
 
-6.  **Rode as migrações iniciais:**
-    Em um novo terminal, execute:
-    docker compose exec scholarship python manage.py makemigrations
-    docker compose exec scholarship python manage.py migrate
+Crie um `.env` baseado no `.env.example`. Principais: `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `AUTH_SERVICE_URL`, `INTERNAL_TOKEN`.
 
-7.  **Acesse o serviço:**
-    O projeto estará disponível em: http://localhost:8000
+## Documentação da API
 
----
+Com o serviço rodando, acesse a documentação interativa:
 
-## 🧪 Comandos Úteis
+- **Swagger UI:** `http://localhost:8002/swagger/`
 
-* **Criar Superusuário (Admin):**
-    `docker-compose exec scholarship python manage.py createsuperuser`
-* **Criar Migrações:**
-    `docker-compose exec scholarship python manage.py makemigrations`
-* **Parar Containers:**
-    `docker-compose down`
+## Exemplos de payload
 
----
-### Documentação Swagger da API
-A documentação interativa da API é gerada automaticamente pelo `drf-spectacular` e `OpenAPI 3.0`.
+**Criar tecnologia:**
+```json
+{"name": "Python"}
+```
 
-## Para acessá-la localmente, suba o container docker e acesse a seguinte URL em seu navegador:
-http://127.0.0.1:8000/swagger/
-
-## Exemplos de payloads
-# Criar uma tecnologia:
-{
-    "name": "Python"
-},
-{
-    "name": "C#"
-}
-
-# Criar uma bolsa estudantil:
+**Criar bolsa:**
+```json
 {
   "title": "Monitoria de Algoritmos 2026.1",
   "description": "Auxílio a alunos do primeiro ano nas disciplinas de programação.",
@@ -75,43 +58,31 @@ http://127.0.0.1:8000/swagger/
   "minimum_period": 2,
   "minimum_ira": 7.5,
   "orientator_id": "84825945-8370-496e-9080-692797e556e4",
-  "registration_start": "2026-05-13T20:51:53.641973-03:00",
-  "registration_end": "2026-10-13T20:51:53.593598-03:00",
-  "technologies": ["UUID-DA-TECNOLOGIA-AQUI"],
-  "phases": [
-    {
-      "title": "Entrevistas",
-      "start_date": "2026-06-01T08:00:00Z",
-      "end_date": "2026-06-15T23:59:59Z",
-      "display_order": 1
-    }
-  ],
-  "links": [
-    {
-      "label": "Edital Oficial (PDF)",
-      "url": "https://universidade.edu/edital-01.pdf",
-      "type": "Edital",
-      "display_order": 1
-    }
-  ],
-  "requirements": [
-    {
-      "title": "Nota em Algoritmos I",
-      "description": "Ter média final igual ou superior a 8.0 na disciplina.",
-      "display_order": 1
-    }
-  ]
+  "registration_start": "2026-05-13T20:51:53Z",
+  "registration_end": "2026-10-13T20:51:53Z",
+  "technologies": ["UUID-DA-TECNOLOGIA"],
+  "phases": [{"title": "Entrevistas", "start_date": "2026-06-01T08:00:00Z", "end_date": "2026-06-15T23:59:59Z", "display_order": 1}],
+  "links": [{"label": "Edital Oficial", "url": "https://universidade.edu/edital.pdf", "type": "Edital", "display_order": 1}],
+  "requirements": [{"title": "Nota em Algoritmos I", "description": "Média >= 8.0", "display_order": 1}]
 }
+```
 
-# Criar uma inscrição em uma bolsa:
-{
-  "scholarship": "UUID-DA-BOLSA-AQUI"
-}
+**Candidatar-se a uma bolsa:**
+```json
+{"scholarship": "UUID-DA-BOLSA"}
+```
 
-# Criar um registro no banco de talentos
-{
-  "is_actively_looking": true
-}
+**Entrar no banco de talentos:**
+```json
+{"is_actively_looking": true}
+```
 
-### Como atualizar a documentação
-A documentação reflete o código atual. Sempre que adicionar uma nova rota, atualizar um `Serializer` ou alterar as permissões de uma View, o Swagger será atualizado automaticamente.
+## Comandos úteis
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py test
+```
+
