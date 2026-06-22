@@ -13,6 +13,9 @@ class Note(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
 
+    def __str__(self):
+        return f"Nota para Aluno {self.student_id} por Orientador {self.orientador_id}"
+
     def clean(self):
         super().clean()
         if self.student_id == self.orientador_id:

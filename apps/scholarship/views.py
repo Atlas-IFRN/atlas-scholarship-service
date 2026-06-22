@@ -126,15 +126,6 @@ class ApplicationListView(ApplicationQuerysetMixin, generics.ListAPIView):
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['status', 'applied_at', 'updated_at']
     ordering = ['-applied_at']
-    
-    
-class ApplicationDetailView(ApplicationQuerysetMixin, generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = ApplicationSerializer
-
-    def get_permissions(self):
-        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        return [IsAuthenticatedViaRPC()]
 
 
 class ApplicationCreateView(generics.CreateAPIView):
@@ -193,6 +184,7 @@ class ApplicationCreateView(generics.CreateAPIView):
 
 
 class ApplicationCancelView(generics.UpdateAPIView):
+    # apenas o próprio aluno pode cancelar sua candidatura, e somente se ela estiver em status "Enrolled"
     serializer_class = ApplicationSerializer
     permission_classes = [IsAuthenticatedViaRPC, IsStudent]
     http_method_names = ['patch']
@@ -213,6 +205,50 @@ class ApplicationCancelView(generics.UpdateAPIView):
 
     def perform_update(self, serializer):
         serializer.save(status='Cancelled')
+
+
+class ApplicationAproveView(generics.UpdateAPIView):
+    # apenas o professor pode aprovar uma candidatura, e somente se ela estiver em status "Enrolled"
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsTeacher]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        try:
+            return Application.objects.get(
+                id=self.kwargs['application_id'],
+                status='Enrolled',
+            )
+        except Application.DoesNotExist:
+            raise NotFound({
+                'detail': 'Candidatura não encontrada.',
+                'code': 'not_found',
+            })
+
+    def perform_update(self, serializer):
+        serializer.save(status='Approved')
+
+
+class ApplicationReproveView(generics.UpdateAPIView):
+    # apenas o professor pode reprovar uma candidatura, e somente se ela estiver em status "Enrolled"
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsTeacher]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        try:
+            return Application.objects.get(
+                id=self.kwargs['application_id'],
+                status='Enrolled',
+            )
+        except Application.DoesNotExist:
+            raise NotFound({
+                'detail': 'Candidatura não encontrada.',
+                'code': 'not_found',
+            })
+
+    def perform_update(self, serializer):
+        serializer.save(status='Rejected')
 
 
 class TechnologyListCreateView(generics.ListCreateAPIView):
