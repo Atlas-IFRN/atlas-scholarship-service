@@ -1,60 +1,44 @@
 # Scholarship Service 🎓
 
-Serviço de gerenciamento de bolsas de estudo desenvolvido com Django 5.x e Docker.
+Microserviço do ecossistema **Atlas** responsável pelo gerenciamento de bolsas de estudo, candidaturas, banco de talentos e pontuação de alunos.
 
----
+## Stack
 
-## 🛠️ Setup Local (Com Docker) - Recomendado
+- Python · Django 5.x · Django REST Framework
+- PostgreSQL · Redis · RabbitMQ + Celery
+- Docker · drf-spectacular (Swagger/OpenAPI 3.0)
 
-A forma mais rápida de rodar o projeto é utilizando o Docker, pois ele já configura todo o ambiente para você.
+## Executando localmente
 
-1.  **Clone o repositório:**
-    No terminal:
-    git clone <url-do-repositorio>
-    cd scholarship-service
+Este serviço é orquestrado junto com todos os outros pelo repositório central de infraestrutura:
 
-2.  **Configure as variáveis de ambiente:**
-    Crie um arquivo chamado `.env` na raiz do projeto e cole as informações que estão presentes no .env.example
+> **[Atlas-IFRN/atlas-infra](https://github.com/Atlas-IFRN/atlas-infra)** — Docker Compose canônico, Nginx, scripts de deploy e backup.
 
-3. **Crie um ambiente virtual e o ative**
-    python -m venv .venv
+Para subir apenas a infraestrutura compartilhada (Postgres, Redis, RabbitMQ) e rodar este serviço isolado em modo dev:
 
-    No windows: .\.venv\Scripts\activate
-    No linux: source .venv/bin/activate
+```bash
+# 1. Suba a infra compartilhada
+git clone https://github.com/Atlas-IFRN/atlas-infra
+cd atlas-infra
+docker compose -f docker-compose.dev.yml up -d
 
-4. **Baixe as dependências presentes no requirements.txt**
-    pip install django django-environ
-    ou
-    pip install -r requirements.txt
+# 2. Neste repositório
+cp .env.example .env
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 8002
+```
 
-5.  **Suba o container:**
-    docker compose up --build
+## Variáveis de ambiente
 
-6.  **Rode as migrações iniciais:**
-    Em um novo terminal, execute:
-    docker compose exec scholarship python manage.py makemigrations
-    docker compose exec scholarship python manage.py migrate
+Crie um `.env` baseado no `.env.example`. Principais: `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `AUTH_SERVICE_URL`, `INTERNAL_TOKEN`.
 
-7.  **Acesse o serviço:**
-    O projeto estará disponível em: http://localhost:8000
+## Documentação da API
 
----
+Com o serviço rodando, acesse a documentação interativa:
 
-## 🧪 Comandos Úteis
-
-* **Criar Superusuário (Admin):**
-    `docker-compose exec web python manage.py createsuperuser`
-* **Criar Migrações:**
-    `docker-compose exec web python manage.py makemigrations`
-* **Parar Containers:**
-    `docker-compose down`
-
----
-### Documentação Swagger da API
-A documentação interativa da API é gerada automaticamente pelo `drf-spectacular` e `OpenAPI 3.0`.
-
-## Para acessá-la localmente, suba o container docker e acesse a seguinte URL em seu navegador:
-http://127.0.0.1:8000/swagger/
+- **Swagger UI:** `http://localhost:8002/swagger/`
 
 ## Exemplos de payloads
 
