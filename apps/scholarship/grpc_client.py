@@ -33,6 +33,7 @@ def validate_token(token: str) -> dict | None:
             timeout=3,
         )
         if response.valid:
+            print(f"role {response.role}")
             return {
                 "user_id": response.user_id,
                 "role": response.role,

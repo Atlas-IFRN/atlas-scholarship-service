@@ -57,78 +57,168 @@ A documentação interativa da API é gerada automaticamente pelo `drf-spectacul
 http://127.0.0.1:8000/swagger/
 
 ## Exemplos de payloads
-# Criar uma tecnologia:
-{
-    "name": "Python"
-},
-{
-    "name": "C#"
-}
 
-# Criar uma bolsa estudantil:
-{
-	"title": "Sistema de Monitoramento com IoT e Machine Learning",
-	"description": "Pesquisa aplicada a soluções embarcadas com coleta de dados em tempo real e modelos preditivos de manutenção. O projeto integra o grupo de pesquisa do Carlos Fernandes e tem como objetivo desenvolver uma solução completa — da fundamentação teórica à validação experimental — com publicação dos resultados em eventos científicos nacionais e, conforme desempenho, em periódicos qualificados pela CAPES.",
-	"value_per_month": "750.00",
-	"duration_in_months": 12,
-	"vacancies": 4,
-	"minimum_period": 3,
-	"minimum_ira": "70.00",
-	"published_by": "98e4789a-b16b-4a8c-9376-e41a8f8e9ca3",
-	"status": "Open",
-	"phases": [
-		{
-			"title": "Inscrições",
-			"start_date": "2026-06-14T23:54:38-03:00",
-			"end_date": "2026-06-30T23:54:45-03:00",
-			"display_order": 1
-		}
-	],
-	"links": [
-		{
-			"label": "Edital",
-			"url": "https://suap.ifrn.edu.br/",
-			"display_order": 1
-		}
-	],
-	"requirements": [
-		{
-			"title": "Conhecimento em Python",
-			"description": "Ter concluído a trilha de conhecimento backend com Python",
-			"display_order": 1
-		}
-	],
-	"technologies": [
-		{
-			"id": "UUID-DA-TECNOLOGIA-AQUI",
-		}
-	],
-	"created_at": "2026-06-14T23:53:33.282430-03:00",
-	"updated_at": "2026-06-14T23:53:33.282460-03:00"
-}
+Todos os endpoints abaixo exigem o header `Authorization: Bearer <token>`.
 
-# Criar uma inscrição em uma bolsa:
-{
-  "scholarship": "UUID-DA-BOLSA-AQUI",
-  "student_id": "c1234567-89ab-cdef-0123-456789abcdef",
-  "student_ira": 8.85,
-  "user_role": "STUDENT"
-}
+### Criar uma tecnologia
 
-# Criar um registro no banco de talentos
-{
-  student_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-	"is_actively_looking": true
-}
+`POST /api/scholarship/technologies/`
 
-# Criar uma entrevista
+```json
 {
-	"interviewer_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-	"description": "O aluno se comunica muito bem, tem muito conhecimento técnico da linguagem e de estruturas de projetos.",
-	"interview_date": "2026-05-15T21:23:43.538000-03:00",
-	"talent_registration": "UUID-DO-REGISTRO-NO-BANCO-DE-TALENTOS-AQUI",
-	"application": "UUID-DA-INSCRIÇÃO-AQUI (OPCIONAL)"
+  "name": "Python"
 }
+```
+
+### Criar uma bolsa estudantil
+
+`POST /api/scholarship/scholarships/`
+
+Os campos `id`, `published_by`, `user_application`, `created_at` e `updated_at`
+são preenchidos pela API e não devem ser enviados.
+
+```json
+{
+  "title": "Sistema de Monitoramento com IoT e Machine Learning",
+  "description": "Pesquisa aplicada a soluções embarcadas com coleta de dados em tempo real.",
+  "value_per_month": "750.00",
+  "duration_in_months": 12,
+  "vacancies": 4,
+  "minimum_period": 3,
+  "minimum_ira": "7.00",
+  "status": "Open",
+  "phases": [
+    {
+      "title": "Inscrições",
+      "start_date": "2026-06-14T23:54:38-03:00",
+      "end_date": "2026-06-30T23:54:45-03:00",
+      "type": "Registration",
+      "display_order": 1
+    },
+    {
+      "title": "Seleção",
+      "start_date": "2026-07-01T08:00:00-03:00",
+      "end_date": "2026-07-05T18:00:00-03:00",
+      "type": "Selection",
+      "display_order": 2
+    }
+  ],
+  "links": [
+    {
+      "label": "Edital",
+      "url": "https://suap.ifrn.edu.br/",
+      "display_order": 1
+    }
+  ],
+  "requirements": [
+    {
+      "title": "Conhecimento em Python",
+      "description": "Ter concluído a trilha de backend com Python.",
+      "display_order": 1
+    }
+  ],
+  "technologies": [
+    "98e4789a-b16b-4a8c-9376-e41a8f8e9ca3"
+  ]
+}
+```
+
+Os status aceitos são `Draft`, `Open`, `RegistrationClosed` e `Closed`. Os tipos
+de fase aceitos são `Registration`, `Selection`, `Result` e `Other`.
+
+### Atualizar parcialmente uma bolsa
+
+`PATCH /api/scholarship/scholarships/<uuid-da-bolsa>/`
+
+```json
+{
+  "status": "RegistrationClosed",
+  "vacancies": 3
+}
+```
+
+### Trecho da resposta do detalhe de uma bolsa para estudante
+
+`GET /api/scholarship/scholarships/<uuid-da-bolsa>/`
+
+O campo `user_application` informa se o estudante autenticado já possui uma
+candidatura. Para professores, esse campo retorna `null`.
+
+```json
+{
+  "id": "c740cd62-e16f-40a7-aa40-8c61c91519c9",
+  "title": "Sistema de Monitoramento com IoT e Machine Learning",
+  "status": "Open",
+  "user_application": {
+    "applied": true,
+    "application_id": "7ee3cf8a-30cb-4e62-82eb-5ca41781a581",
+    "status": "Enrolled"
+  }
+}
+```
+
+### Criar uma candidatura
+
+`POST /api/scholarship/scholarships/<uuid-da-bolsa>/apply/`
+
+O corpo pode ser vazio. A bolsa é obtida pela URL e os dados do estudante são
+obtidos do token validado pelo serviço de autenticação.
+
+```json
+{}
+```
+
+### Atualizar o status de uma candidatura
+
+`PATCH /api/scholarship/applications/<uuid-da-candidatura>/`
+
+```json
+{
+  "status": "Approved"
+}
+```
+
+Os status aceitos são `Cancelled`, `Enrolled`, `Approved` e `Rejected`.
+
+### Cancelar a própria candidatura
+
+`PATCH /api/scholarship/scholarships/<uuid-da-bolsa>/cancel/`
+
+```json
+{}
+```
+
+### Resposta paginada de uma listagem
+
+```json
+{
+  "count": 24,
+  "next": "http://localhost:8002/api/scholarship/scholarships/?page=2",
+  "previous": null,
+  "results": []
+}
+```
+
+### Criar um registro no banco de talentos
+
+```json
+{
+  "student_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "is_actively_looking": true
+}
+```
+
+### Criar uma entrevista
+
+```json
+{
+  "interviewer_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "description": "O aluno se comunica bem e possui conhecimento técnico.",
+  "interview_date": "2026-05-15T21:23:43.538000-03:00",
+  "talent_registration": "UUID-DO-REGISTRO-NO-BANCO-DE-TALENTOS-AQUI",
+  "application": "UUID-DA-INSCRIÇÃO-AQUI (OPCIONAL)"
+}
+```
 
 
 ### Como atualizar a documentação
