@@ -1,5 +1,3 @@
-import uuid
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import OuterRef, Prefetch, Subquery
 from django.http import Http404
@@ -20,7 +18,7 @@ from .serializers import (
 
 
 class ScholarshipQuerysetMixin:
-    allowed_status_filters = {'Open', 'Closing', 'Closed'}
+    allowed_status_filters = {'Draft', 'Open', 'RegistrationClosed', 'Closed'}
 
     def get_queryset(self):
         payload = self.request.auth_payload
@@ -52,21 +50,16 @@ class ScholarshipQuerysetMixin:
         if requested_status:
             if requested_status not in self.allowed_status_filters:
                 raise ValidationError({
-                    'detail': 'Status inválido. Use Open, Closing ou Closed.',
+                    'detail': 'Status inválido. Use Draft, Open, RegistrationClosed ou Closed.',
                     'code': 'invalid_status_filter',
                 })
             queryset = queryset.filter(status=requested_status)
 
-        technology_id = self.request.query_params.get('technology')
-        if technology_id:
-            try:
-                technology_id = uuid.UUID(technology_id)
-            except (TypeError, ValueError, DjangoValidationError):
-                raise ValidationError({
-                    'detail': 'O filtro technology deve ser um UUID válido.',
-                    'code': 'invalid_technology_filter',
-                })
-            queryset = queryset.filter(technologies__id=technology_id)
+        technology_name = self.request.query_params.get('technology')
+        if technology_name:
+            queryset = queryset.filter(
+                technologies__name__icontains=technology_name.strip(),
+            )
 
         return queryset.order_by('-created_at')
 
