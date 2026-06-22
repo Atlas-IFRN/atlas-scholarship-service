@@ -23,12 +23,13 @@ def _normalize_grpc_url(grpc_url: str) -> str:
 
 _GRPC_URL = _normalize_grpc_url(getattr(settings, 'AUTH_GRPC_URL', 'auth-service:50051'))
 _channel = grpc.insecure_channel(_GRPC_URL)
-_stub = user_pb2_grpc.AuthServiceStub(_channel)
+_auth_stub = user_pb2_grpc.AuthServiceStub(_channel)
+_user_stub = user_pb2_grpc.UserServiceStub(_channel)
 
 
 def validate_token(token: str) -> dict | None:
     try:
-        response = _stub.ValidateToken(
+        response = _auth_stub.ValidateToken(
             user_pb2.ValidateTokenRequest(token=token),
             timeout=3,
         )
@@ -38,6 +39,34 @@ def validate_token(token: str) -> dict | None:
                 "user_id": response.user_id,
                 "role": response.role,
                 "email": response.email,
+            }
+        return None
+    except grpc.RpcError:
+        return None
+
+
+def get_user_profile(user_id: str) -> dict | None:
+    try:
+        response = _user_stub.GetUserProfile(
+            user_pb2.UserRequest(matricula=user_id),
+            timeout=3,
+        )
+        if response.id:
+            return {
+                "id": response.id,
+                "matricula": response.matricula,
+                "first_name": response.first_name,
+                "full_name": response.full_name,
+                "email": response.email,
+                "role": response.role,
+                "ira": float(response.ira) if response.ira is not None else None,
+                "period": response.period,
+                "about_me": response.about_me,
+                "linkedin": response.linkedin,
+                "github": response.github,
+                "curriculo_lattes": response.curriculo_lattes,
+                "course_name": response.course_name,
+                "institution_name": response.institution_name,
             }
         return None
     except grpc.RpcError:
