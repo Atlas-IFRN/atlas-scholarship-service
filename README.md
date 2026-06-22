@@ -40,6 +40,21 @@ Com o serviço rodando, acesse a documentação interativa:
 
 - **Swagger UI:** `http://localhost:8002/swagger/`
 
+* **Criar Superusuário (Admin):**
+    `docker-compose exec web python manage.py createsuperuser`
+* **Criar Migrações:**
+    `docker-compose exec web python manage.py makemigrations`
+* **Parar Containers:**
+    `docker-compose down`
+
+**Criar tecnologia:**
+```json
+{"name": "Python"}
+```
+
+## Para acessá-la localmente, suba o container docker e acesse a seguinte URL em seu navegador:
+http://127.0.0.1:8000/swagger/
+
 ## Exemplos de payloads
 
 Todos os endpoints abaixo exigem o header `Authorization: Bearer <token>`.
