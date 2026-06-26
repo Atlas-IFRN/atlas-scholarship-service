@@ -24,6 +24,7 @@ class Scholarship(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
+    activity_description = models.TextField(help_text="Responsabilidades do bolsista", null=True, blank=True) # responsabilidades do bolsista
     value_per_month = models.DecimalField(max_digits=10, decimal_places=2)
     duration_in_months = models.PositiveIntegerField(default=1, help_text="Duração em meses")
     vacancies = models.PositiveIntegerField(default=1)

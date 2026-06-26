@@ -57,6 +57,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'description',
+            'activity_description',
             'value_per_month',
             'duration_in_months',
             'vacancies',
