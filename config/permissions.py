@@ -10,7 +10,7 @@ from apps.scholarship.grpc_client import validate_token
 
 class AuthServiceUnavailable(APIException):
     status_code = 503
-    default_detail = "ServiÃ§o de autenticaÃ§Ã£o indisponÃ­vel."
+    default_detail = "Serviço de autenticação indisponível."
     default_code = "auth_service_unavailable"
 
 
