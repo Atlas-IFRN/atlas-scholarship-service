@@ -2,10 +2,16 @@ import hashlib
 import json
 
 from django.core.cache import cache
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
 from rest_framework.permissions import BasePermission
 
 from apps.scholarship.grpc_client import validate_token
+
+
+class AuthServiceUnavailable(APIException):
+    status_code = 503
+    default_detail = "ServiÃ§o de autenticaÃ§Ã£o indisponÃ­vel."
+    default_code = "auth_service_unavailable"
 
 
 class IsAuthenticatedViaRPC(BasePermission):
@@ -22,7 +28,10 @@ class IsAuthenticatedViaRPC(BasePermission):
             request.auth_payload = json.loads(cached)
             return True
 
-        payload = validate_token(token)
+        try:
+            payload = validate_token(token)
+        except RuntimeError as exc:
+            raise AuthServiceUnavailable(str(exc))
 
         if not payload:
             raise NotAuthenticated("Token inválido ou expirado.")

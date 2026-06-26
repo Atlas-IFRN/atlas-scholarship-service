@@ -1,12 +1,19 @@
-from django.urls import include, path
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from .views import NoteViewSet, TalentViewSet
+from .views import (
+    NoteDetailView,
+    NoteListCreateView,
+    TalentActivateView,
+    TalentDeactivateView,
+    TalentListCreateView,
+)
 
-router = DefaultRouter()
-router.register(r'talent-bank', TalentViewSet, basename='talentbank')
-router.register(r'notes', NoteViewSet, basename='notes')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('talent-bank/', TalentListCreateView.as_view(), name='talentbank-list'),
+    path('talent-bank/activate/', TalentActivateView.as_view(), name='talentbank-activate'),
+    path('talent-bank/deactivate/', TalentDeactivateView.as_view(), name='talentbank-deactivate'),
+    
+    path('notes/', NoteListCreateView.as_view(), name='notes-list'),
+    path('notes/<uuid:pk>/', NoteDetailView.as_view(), name='notes-detail'),
 ]
