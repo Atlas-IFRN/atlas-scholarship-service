@@ -1,13 +1,25 @@
-from django.urls import include, path
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from .views import ApplicationViewSet, ScholarshipViewSet, TechnologyViewSet
-
-router = DefaultRouter()
-router.register(r'scholarships', ScholarshipViewSet, basename='scholarship')
-router.register(r'applications', ApplicationViewSet, basename='application')
-router.register(r'technologies', TechnologyViewSet, basename='technology')
+from .views import (
+    ApplicationCancelView,
+    ApplicationCreateView,
+    ApplicationListView,
+    ScholarshipDetailView,
+    ScholarshipListCreateView,
+    ApplicationReproveView,
+    ApplicationAproveView,
+    TechnologyListCreateView,
+)
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('scholarships/', ScholarshipListCreateView.as_view(), name='scholarship-list-create'),
+    path('scholarships/<uuid:pk>/', ScholarshipDetailView.as_view(), name='scholarship-detail'),
+    
+    path('applications/', ApplicationListView.as_view(), name='application-list'),
+    path('scholarships/<uuid:scholarship_id>/apply/', ApplicationCreateView.as_view(), name='application-create'),
+    path('scholarships/<uuid:scholarship_id>/cancel/', ApplicationCancelView.as_view(), name='application-cancel'),
+    path('applications/<uuid:application_id>/reprove/', ApplicationReproveView.as_view(), name='application-reprove'),
+    path('applications/<uuid:application_id>/approve/', ApplicationAproveView.as_view(), name='application-approve'),   
+    
+    path('technologies/', TechnologyListCreateView.as_view(), name='technology-list'),
 ]

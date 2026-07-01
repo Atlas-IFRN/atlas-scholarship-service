@@ -1,175 +1,253 @@
-from django.utils import timezone
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import OuterRef, Prefetch, Subquery
+from django.http import Http404
+from rest_framework import filters, generics, status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
 from config.permissions import IsAuthenticatedViaRPC, IsStudent, IsTeacher
 
-from .grpc_client import get_user_profile
-from .models import Application, Scholarship, Technology
-from .serializers import ApplicationSerializer, ScholarshipSerializer, TechnologySerializer
+from .models import Application, Scholarship, ScholarshipPhase, Technology
+from .pagination import Pagination
+from .serializers import (
+    ApplicationSerializer,
+    ScholarshipListSerializer,
+    ScholarshipSerializer,
+    TechnologySerializer,
+)
 
 
-def _ensure_scholarship_owner(scholarship: Scholarship, request) -> None:
-    """Bloqueia ação se o usuário logado não for o orientador da bolsa."""
-    user_id = request.auth_payload.get('user_id') if getattr(request, 'auth_payload', None) else None
-    if str(scholarship.orientator_id) != str(user_id):
-        raise PermissionDenied("Apenas o orientador da bolsa pode executar esta ação.")
-
-
-class TechnologyViewSet(viewsets.ModelViewSet):
-    queryset = Technology.objects.all()
-    serializer_class = TechnologySerializer
-    lookup_field = 'id'
-
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        return [IsAuthenticatedViaRPC()]
-
-
-class ScholarshipViewSet(viewsets.ModelViewSet):
-    queryset = Scholarship.objects.all()
-    serializer_class = ScholarshipSerializer
-    lookup_field = 'id'
-
-    def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy', 'close']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        if self.action == 'me_orienting':
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        return [IsAuthenticatedViaRPC()]
-
-    def perform_create(self, serializer):
-        serializer.save(orientator_id=self.request.auth_payload.get('user_id'))
-
-    @action(detail=True, methods=['post'])
-    def close(self, request, id=None):
-        """Fecha inscrições manualmente (status -> Closed). Apenas o orientador."""
-        scholarship = self.get_object()
-        _ensure_scholarship_owner(scholarship, request)
-
-        if scholarship.status == 'Closed':
-            raise ValidationError({"status": "Bolsa já está fechada."})
-
-        scholarship.status = 'Closed'
-        scholarship.save()
-        return Response(ScholarshipSerializer(scholarship).data)
-
-    @action(detail=False, methods=['get'], url_path='me/orienting')
-    def me_orienting(self, request):
-        """Bolsas do professor atual + contagem de inscritos."""
-        user_id = request.auth_payload.get('user_id')
-        scholarships = Scholarship.objects.filter(orientator_id=user_id).order_by('-created_at')
-
-        results = []
-        for s in scholarships:
-            results.append(
-                {
-                    'id': str(s.id),
-                    'title': s.title,
-                    'status': s.status,
-                    'vacancies': s.vacancies,
-                    'value_per_month': str(s.value_per_month),
-                    'applications_count': s.applications.count(),
-                    'registration_start': s.registration_start,
-                    'registration_end': s.registration_end,
-                    'created_at': s.created_at,
-                }
-            )
-        return Response(results)
-
-    @action(detail=True, methods=['get'])
-    def applications(self, request, id=None):
-        """Lista candidatos da bolsa. Apenas o orientador. Resolução do auth fica a cargo do FE."""
-        scholarship = self.get_object()
-        _ensure_scholarship_owner(scholarship, request)
-
-        qs = scholarship.applications.all().order_by('-applied_at')
-        return Response(ApplicationSerializer(qs, many=True).data)
-
-
-class ApplicationViewSet(viewsets.ModelViewSet):
-    serializer_class = ApplicationSerializer
-    lookup_field = 'id'
-
-    def get_permissions(self):
-        if self.action == 'create':
-            return [IsAuthenticatedViaRPC(), IsStudent()]
-        if self.action in ['update', 'partial_update', 'destroy']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        if self.action in ['approve', 'reject']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-        if self.action == 'withdraw':
-            return [IsAuthenticatedViaRPC(), IsStudent()]
-        return [IsAuthenticatedViaRPC()]
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-
-        if self.action == 'create':
-            payload = getattr(self.request, 'auth_payload', None) or {}
-            user_id = payload.get('user_id')
-            context['auth_profile'] = get_user_profile(user_id) if user_id else None
-
-        return context
+class ScholarshipQuerysetMixin:
+    allowed_status_filters = {'Draft', 'Open', 'RegistrationClosed', 'Closed'}
 
     def get_queryset(self):
         payload = self.request.auth_payload
         role = payload.get('role')
+        user_id = payload.get('user_id')
 
-        if role == 'TEACHER':
-            return Application.objects.all()
+        registration_end = ScholarshipPhase.objects.filter(
+            scholarship_id=OuterRef('pk'),
+            type='Registration',
+        ).order_by('display_order', 'end_date').values('end_date')[:1]
 
-        return Application.objects.filter(student_id=payload.get('user_id'))
+        queryset = Scholarship.objects.annotate(
+            registration_end=Subquery(registration_end),
+        ).prefetch_related('phases', 'links', 'requirements', 'technologies')
+
+        if role == 'STUDENT':
+            queryset = queryset.filter(status='Open').prefetch_related(
+                Prefetch(
+                    'applications',
+                    queryset=Application.objects.filter(
+                        student_id=user_id,
+                        status__in=['Enrolled', 'Approved', 'Rejected'],
+                    ).order_by('-updated_at'),
+                    to_attr='current_user_applications',
+                )
+            )
+
+        requested_status = self.request.query_params.get('status')
+        if requested_status:
+            if requested_status not in self.allowed_status_filters:
+                raise ValidationError({
+                    'detail': 'Status inválido. Use Draft, Open, RegistrationClosed ou Closed.',
+                    'code': 'invalid_status_filter',
+                })
+            queryset = queryset.filter(status=requested_status)
+
+        technology_name = self.request.query_params.get('technology')
+        if technology_name:
+            queryset = queryset.filter(
+                technologies__name__icontains=technology_name.strip(),
+            )
+
+        return queryset.order_by('-created_at')
+
+    def get_object(self):
+        try:
+            return super().get_object()
+        except (Http404, NotFound):
+            raise NotFound({
+                'detail': 'Bolsa não encontrada.',
+                'code': 'not_found',
+            })
+
+
+class ScholarshipListCreateView(ScholarshipQuerysetMixin, generics.ListCreateAPIView):
+    pagination_class = Pagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['registration_end', 'created_at']
+    ordering = ['-created_at']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
+        return [IsAuthenticatedViaRPC()]
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ScholarshipSerializer
+        return ScholarshipListSerializer
 
     def perform_create(self, serializer):
+        serializer.save(published_by=self.request.auth_payload.get('user_id'))
+
+
+class ScholarshipDetailView(ScholarshipQuerysetMixin, generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ScholarshipSerializer
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
+        return [IsAuthenticatedViaRPC()]
+
+
+class ApplicationQuerysetMixin:
+    def get_queryset(self):
         payload = self.request.auth_payload
-        serializer.save(student_id=payload.get('user_id'))
+        queryset = Application.objects.select_related('scholarship').order_by('-applied_at')
 
-    @action(detail=True, methods=['post'])
-    def withdraw(self, request, id=None):
-        """Aluno cancela a própria candidatura."""
-        application = self.get_object()
-        user_id = request.auth_payload.get('user_id')
-        if str(application.student_id) != str(user_id):
-            raise PermissionDenied("Você só pode cancelar a sua própria candidatura.")
+        if payload.get('role') == 'TEACHER':
+            return queryset
+        return queryset.filter(student_id=payload.get('user_id'))
 
-        if application.status == 'Approved':
-            raise ValidationError(
-                {"status": "Candidaturas já aprovadas não podem ser canceladas. Procure o orientador."}
+
+class ApplicationListView(ApplicationQuerysetMixin, generics.ListAPIView):
+    pagination_class = Pagination
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsStudent | IsTeacher]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['status', 'applied_at', 'updated_at']
+    ordering = ['-applied_at']
+
+
+class ApplicationCreateView(generics.CreateAPIView):
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsStudent]
+
+    def create(self, request, *args, **kwargs):
+        payload = request.auth_payload
+        scholarship_id = self.kwargs['scholarship_id']
+        student_id = payload.get('user_id')
+
+        try:
+            scholarship = Scholarship.objects.get(id=scholarship_id)
+        except Scholarship.DoesNotExist:
+            raise NotFound({'detail': 'Bolsa não encontrada.', 'code': 'not_found'})
+
+        if scholarship.status != 'Open':
+            raise ValidationError({
+                'detail': 'O prazo de inscrição para esta bolsa foi encerrado.',
+                'code': 'registration_closed',
+            })
+
+        student_ira = payload.get('ira')
+        student_period = payload.get('period')
+        student_role = payload.get('role')
+
+        existing = Application.objects.filter(
+            scholarship=scholarship,
+            student_id=student_id,
+        ).first()
+
+        if existing and existing.status != 'Cancelled':
+            raise ValidationError({
+                'detail': 'Você já se candidatou para esta bolsa.',
+                'code': 'already_applied',
+            })
+
+        application = existing or Application(
+            scholarship=scholarship,
+            student_id=student_id,
+        )
+        application.status = 'Enrolled'
+        application._student_ira = student_ira
+        application._student_period = student_period
+        application._student_role = student_role
+
+        try:
+            application.full_clean()
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.message_dict)
+
+        application.save()
+        serializer = self.get_serializer(application)
+        response_status = status.HTTP_200_OK if existing else status.HTTP_201_CREATED
+        return Response(serializer.data, status=response_status)
+
+
+class ApplicationCancelView(generics.UpdateAPIView):
+    # apenas o próprio aluno pode cancelar sua candidatura, e somente se ela estiver em status "Enrolled"
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsStudent]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        payload = self.request.auth_payload
+        try:
+            return Application.objects.get(
+                scholarship_id=self.kwargs['scholarship_id'],
+                student_id=payload.get('user_id'),
+                status='Enrolled',
             )
-        if application.status == 'Rejected':
-            raise ValidationError({"status": "Candidatura já está como Rejected."})
+        except Application.DoesNotExist:
+            raise NotFound({
+                'detail': 'Candidatura não encontrada.',
+                'code': 'not_found',
+            })
 
-        application.delete()
-        return Response({"detail": "Candidatura cancelada."}, status=204)
+    def perform_update(self, serializer):
+        serializer.save(status='Cancelled')
 
-    @action(detail=True, methods=['post'])
-    def approve(self, request, id=None):
-        """Professor aprova candidato. Só o orientador da bolsa."""
-        application = self.get_object()
-        _ensure_scholarship_owner(application.scholarship, request)
 
-        if application.status == 'Approved':
-            raise ValidationError({"status": "Candidatura já está aprovada."})
+class ApplicationAproveView(generics.UpdateAPIView):
+    # apenas o professor pode aprovar uma candidatura, e somente se ela estiver em status "Enrolled"
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsTeacher]
+    http_method_names = ['patch']
 
-        application.status = 'Approved'
-        application.updated_at = timezone.now()
-        application.save()
-        return Response(ApplicationSerializer(application).data)
+    def get_object(self):
+        try:
+            return Application.objects.get(
+                id=self.kwargs['application_id'],
+                status='Enrolled',
+            )
+        except Application.DoesNotExist:
+            raise NotFound({
+                'detail': 'Candidatura não encontrada.',
+                'code': 'not_found',
+            })
 
-    @action(detail=True, methods=['post'])
-    def reject(self, request, id=None):
-        """Professor rejeita candidato. Só o orientador da bolsa."""
-        application = self.get_object()
-        _ensure_scholarship_owner(application.scholarship, request)
+    def perform_update(self, serializer):
+        serializer.save(status='Approved')
 
-        if application.status == 'Rejected':
-            raise ValidationError({"status": "Candidatura já está rejeitada."})
 
-        application.status = 'Rejected'
-        application.updated_at = timezone.now()
-        application.save()
-        return Response(ApplicationSerializer(application).data)
+class ApplicationReproveView(generics.UpdateAPIView):
+    # apenas o professor pode reprovar uma candidatura, e somente se ela estiver em status "Enrolled"
+    serializer_class = ApplicationSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsTeacher]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        try:
+            return Application.objects.get(
+                id=self.kwargs['application_id'],
+                status='Enrolled',
+            )
+        except Application.DoesNotExist:
+            raise NotFound({
+                'detail': 'Candidatura não encontrada.',
+                'code': 'not_found',
+            })
+
+    def perform_update(self, serializer):
+        serializer.save(status='Rejected')
+
+
+class TechnologyListCreateView(generics.ListCreateAPIView):
+    queryset = Technology.objects.all().order_by('name')
+    serializer_class = TechnologySerializer
+    pagination_class = Pagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['name']
+    ordering = ['name']

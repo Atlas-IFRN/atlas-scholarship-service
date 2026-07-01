@@ -1,46 +1,37 @@
-from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from django.utils import timezone
+from rest_framework import filters, generics
+from rest_framework.exceptions import NotFound, ValidationError
 
-from config.permissions import IsAuthenticatedViaRPC, IsTeacher
+from config.permissions import IsAuthenticatedViaRPC, IsStudent, IsTeacher
 
 from .models import Note, Talent
+from .pagination import Pagination
 from .serializers import NoteSerializer, TalentSerializer
 
 
-@extend_schema(tags=['Banco de talentos'])
-class TalentViewSet(viewsets.ModelViewSet):
-    serializer_class = TalentSerializer
-    lookup_field = 'id'
-
-    def get_permissions(self):
-        """Permissões divididas usando a nova estrutura baseada em roles do gRPC."""
-        if self.action == 'create':
-            return [IsAuthenticatedViaRPC()]
-        elif self.action in ['list', 'destroy']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-
-        # 'retrieve', 'update', 'partial_update' aceitam qualquer um logado,
-        # pois o get_queryset se encarrega de isolar o registro do aluno correto.
-        return [IsAuthenticatedViaRPC()]
+class TalentQuerysetMixin:
+    allowed_status_filters = {'Active'}
 
     def get_queryset(self):
-        """Isola os dados do talento ou mostra aos professores a lista dos ativos."""
         payload = self.request.auth_payload
         role = payload.get('role')
+        queryset = Talent.objects.all()
 
         if role == 'TEACHER':
-            if self.action == 'list':
-                return Talent.objects.filter(status='Active')
-            return Talent.objects.all()
+            queryset = queryset.filter(status='Active')
+        else:
+            queryset = queryset.filter(student_id=payload.get('user_id'))
 
-        return Talent.objects.filter(student_id=payload.get('user_id'))
+        requested_status = self.request.query_params.get('status')
+        if requested_status:
+            if requested_status not in self.allowed_status_filters:
+                raise ValidationError({
+                    'detail': 'Status inválido. Use Active.',
+                    'code': 'invalid_status_filter',
+                })
+            queryset = queryset.filter(status=requested_status)
 
-    def perform_create(self, serializer):
-        serializer.save(student_id=self.request.auth_payload.get('user_id'))
-
-    def perform_update(self, serializer):
-        """Injeta apenas o ID de quem fez a mudança para fins de auditoria."""
-        serializer.save(status_changed_by=self.request.auth_payload.get('user_id'))
+        return queryset.order_by('-joined_at')
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -48,27 +39,130 @@ class TalentViewSet(viewsets.ModelViewSet):
         return context
 
 
-@extend_schema(tags=['Notas de entrevistas'])
-class NoteViewSet(viewsets.ModelViewSet):
-    serializer_class = NoteSerializer
-    lookup_field = 'id'
+class TalentListCreateView(TalentQuerysetMixin, generics.ListCreateAPIView):
+    serializer_class = TalentSerializer
+    pagination_class = Pagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['joined_at', 'status_changed_at']
+    ordering = ['-joined_at']
 
     def get_permissions(self):
-        # Apenas professores podem criar, editar ou deletar notas
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticatedViaRPC(), IsTeacher()]
-
-        return [IsAuthenticatedViaRPC()]
-
-    def get_queryset(self):
-        """Aluno só lê as próprias notas, professor lê todas."""
-        payload = self.request.auth_payload
-        role = payload.get('role')
-
-        if role == 'TEACHER':
-            return Note.objects.all()
-        return Note.objects.filter(student_id=payload.get('user_id'))
+        if self.request.method == 'POST':
+            return [IsAuthenticatedViaRPC(), IsStudent()]
+        return [IsAuthenticatedViaRPC(), IsTeacher()]
 
     def perform_create(self, serializer):
-        """Associa a nota ao professor criador automaticamente via ID do gRPC."""
-        serializer.save(orientador_id=self.request.auth_payload.get('user_id'))
+        serializer.save(
+            student_id=self.request.auth_payload.get('user_id'),
+            status_changed_by=self.request.auth_payload.get('user_id'),
+            status_changed_at=timezone.now(),
+        )
+
+
+class TalentDeactivateView(TalentQuerysetMixin, generics.UpdateAPIView):
+    serializer_class = TalentSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsStudent]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        try:
+            talent = Talent.objects.get(
+                student_id=self.request.auth_payload.get('user_id'),
+            )
+        except Talent.DoesNotExist:
+            raise NotFound({
+                'detail': 'Registro no banco de talentos não encontrado.',
+                'code': 'not_found',
+            })
+
+        if talent.status != 'Active':
+            raise ValidationError({
+                'detail': 'O talento já está inativo.',
+                'code': 'talent_already_inactive',
+            })
+        return talent
+
+    def perform_update(self, serializer):
+        serializer.save(
+            status='Inactive',
+            status_changed_by=self.request.auth_payload.get('user_id'),
+            status_changed_at=timezone.now(),
+        )
+
+
+class TalentActivateView(TalentQuerysetMixin, generics.UpdateAPIView):
+    serializer_class = TalentSerializer
+    permission_classes = [IsAuthenticatedViaRPC, IsStudent]
+    http_method_names = ['patch']
+
+    def get_object(self):
+        try:
+            talent = Talent.objects.get(
+                student_id=self.request.auth_payload.get('user_id'),
+            )
+        except Talent.DoesNotExist:
+            raise NotFound({
+                'detail': 'Registro no banco de talentos não encontrado.',
+                'code': 'not_found',
+            })
+
+        if talent.status != 'Inactive':
+            raise ValidationError({
+                'detail': 'O talento já está ativo.',
+                'code': 'talent_already_active',
+            })
+        return talent
+
+    def perform_update(self, serializer):
+        serializer.save(
+            status='Active',
+            status_changed_by=self.request.auth_payload.get('user_id'),
+            status_changed_at=timezone.now(),
+        )
+
+
+class NoteQuerysetMixin:
+    def get_queryset(self):
+        payload = self.request.auth_payload
+        queryset = Note.objects.filter(is_active=True)
+
+        if payload.get('role') != 'TEACHER':
+            queryset = queryset.filter(student_id=payload.get('user_id'))
+
+        content = self.request.query_params.get('content')
+        if content:
+            queryset = queryset.filter(content__icontains=content.strip())
+
+        return queryset.order_by('-created_at')
+
+
+class NoteListCreateView(NoteQuerysetMixin, generics.ListCreateAPIView):
+    serializer_class = NoteSerializer
+    pagination_class = Pagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = [
+        'student_id',
+        'orientador_id',
+        'created_at',
+        'updated_at',
+    ]
+    ordering = ['-created_at']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
+        return [IsAuthenticatedViaRPC()]
+
+    def perform_create(self, serializer):
+        serializer.save(
+            orientador_id=self.request.auth_payload.get('user_id'),
+        )
+
+
+class NoteDetailView(NoteQuerysetMixin, generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = NoteSerializer
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
+            return [IsAuthenticatedViaRPC(), IsTeacher()]
+        return [IsAuthenticatedViaRPC()]

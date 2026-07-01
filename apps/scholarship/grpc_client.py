@@ -40,8 +40,8 @@ def validate_token(token: str) -> dict | None:
                 "email": response.email,
             }
         return None
-    except grpc.RpcError:
-        return None
+    except grpc.RpcError as exc:
+        raise RuntimeError(f"Falha ao validar token no auth gRPC ({_GRPC_URL}): {exc.details()}") from exc
 
 
 def get_user_profile(user_id: str) -> dict | None:
